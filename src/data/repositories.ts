@@ -1,0 +1,94 @@
+import type {
+  AssessmentPreset,
+  AttendanceRecord,
+  BehaviourObservation,
+  Classroom,
+  Criterion,
+  IndividualObservation,
+  LabSession,
+  LabSnapshot,
+  PracticalResult,
+  SessionTeam,
+  Student,
+  TeacherAssistance,
+  TeamObservation,
+  TeamOperationalStatus,
+} from "@/src/domain/model";
+
+export interface ClassroomRepository {
+  list(): Promise<Classroom[]>;
+  get(id: string): Promise<Classroom | undefined>;
+  put(value: Classroom): Promise<void>;
+}
+
+export interface StudentRepository {
+  list(): Promise<Student[]>;
+  listByClassroom(classroomId: string): Promise<Student[]>;
+  get(id: string): Promise<Student | undefined>;
+  put(value: Student): Promise<void>;
+}
+
+export interface SessionRepository {
+  list(): Promise<LabSession[]>;
+  listByClassroom(classroomId: string): Promise<LabSession[]>;
+  get(id: string): Promise<LabSession | undefined>;
+  put(value: LabSession): Promise<void>;
+}
+
+export interface SessionTeamRepository {
+  listBySession(sessionId: string): Promise<SessionTeam[]>;
+  put(value: SessionTeam): Promise<void>;
+  updateStatus(id: string, status: TeamOperationalStatus): Promise<void>;
+}
+
+export interface AttendanceRepository {
+  listBySession(sessionId: string): Promise<AttendanceRecord[]>;
+  put(value: AttendanceRecord): Promise<void>;
+}
+
+export interface TeamObservationRepository {
+  listBySession(sessionId: string): Promise<TeamObservation[]>;
+  put(value: TeamObservation): Promise<void>;
+}
+
+export interface IndividualObservationRepository {
+  listBySession(sessionId: string): Promise<IndividualObservation[]>;
+  put(value: IndividualObservation): Promise<void>;
+}
+
+export interface BehaviourObservationRepository {
+  listBySession(sessionId: string): Promise<BehaviourObservation[]>;
+  put(value: BehaviourObservation): Promise<void>;
+}
+
+export interface PresetRepository {
+  list(): Promise<AssessmentPreset[]>;
+  listCriteria(): Promise<Criterion[]>;
+}
+
+export interface AssistanceRepository {
+  listBySession(sessionId: string): Promise<TeacherAssistance[]>;
+  put(value: TeacherAssistance): Promise<void>;
+}
+
+export interface PracticalResultRepository {
+  listBySession(sessionId: string): Promise<PracticalResult[]>;
+  put(value: PracticalResult): Promise<void>;
+}
+
+export interface LabRepositories {
+  classrooms: ClassroomRepository;
+  students: StudentRepository;
+  sessions: SessionRepository;
+  teams: SessionTeamRepository;
+  attendance: AttendanceRepository;
+  teamObservations: TeamObservationRepository;
+  individualObservations: IndividualObservationRepository;
+  behaviourObservations: BehaviourObservationRepository;
+  presets: PresetRepository;
+  assistance: AssistanceRepository;
+  practicalResults: PracticalResultRepository;
+  exportSnapshot(): Promise<LabSnapshot>;
+  importSnapshot(snapshot: LabSnapshot): Promise<void>;
+  resetDemo(): Promise<void>;
+}

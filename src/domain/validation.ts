@@ -1,0 +1,95 @@
+import { z } from "zod";
+import {
+  attendanceReasons,
+  attendanceStatuses,
+  behaviourCategories,
+  sessionStatuses,
+  subjectAreas,
+  teamStatuses,
+} from "./model";
+
+const stableId = z.string().min(3);
+const timestamp = z.string().datetime();
+const score = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+]);
+
+export const classroomSchema = z.object({
+  id: stableId,
+  name: z.string().min(1),
+  academicYear: z.string().min(4),
+  active: z.boolean(),
+});
+
+export const studentSchema = z.object({
+  id: stableId,
+  classroomId: stableId,
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  shortName: z.string().min(1).optional(),
+  active: z.boolean(),
+});
+
+export const sessionSchema = z.object({
+  id: stableId,
+  classroomId: stableId,
+  title: z.string().min(1),
+  date: z.iso.date(),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  subjectArea: z.enum(subjectAreas),
+  status: z.enum(sessionStatuses),
+  notes: z.string().optional(),
+});
+
+export const teamSchema = z.object({
+  id: stableId,
+  sessionId: stableId,
+  name: z.string().min(1),
+  studentIds: z.array(stableId).min(1),
+  operationalStatus: z.enum(teamStatuses),
+});
+
+export const attendanceSchema = z.object({
+  id: stableId,
+  studentId: stableId,
+  sessionId: stableId,
+  status: z.enum(attendanceStatuses),
+  reason: z.enum(attendanceReasons).optional(),
+  events: z.array(
+    z.object({
+      id: stableId,
+      timestamp,
+      kind: z.enum(["entered", "present", "arrived-late", "left-early", "returned"]),
+      note: z.string().optional(),
+    }),
+  ),
+  note: z.string().optional(),
+});
+
+const observationBase = z.object({
+  id: stableId,
+  sessionId: stableId,
+  criterionId: stableId,
+  score: score.optional(),
+  note: z.string().optional(),
+  timestamp,
+});
+
+export const teamObservationSchema = observationBase.extend({ teamId: stableId });
+export const individualObservationSchema = observationBase.extend({ studentId: stableId });
+
+export const behaviourObservationSchema = z.object({
+  id: stableId,
+  studentId: stableId,
+  sessionId: stableId,
+  type: z.enum(["positive", "incident"]),
+  category: z.enum(behaviourCategories),
+  note: z.string().optional(),
+  timestamp,
+});
+
+export const assessmentScoreSchema = score;
