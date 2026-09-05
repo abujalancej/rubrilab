@@ -70,6 +70,7 @@ export interface SessionTeam {
   /** Snapshot of membership for this session; never linked to a persistent team. */
   studentIds: string[];
   operationalStatus: TeamOperationalStatus;
+  note?: string;
 }
 
 export interface AttendanceEvent {

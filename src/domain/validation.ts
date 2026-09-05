@@ -51,6 +51,7 @@ export const teamSchema = z.object({
   name: z.string().min(1),
   studentIds: z.array(stableId).min(1),
   operationalStatus: z.enum(teamStatuses),
+  note: z.string().max(240).optional(),
 });
 
 export const attendanceSchema = z.object({

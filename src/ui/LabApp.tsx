@@ -99,7 +99,7 @@ export function LabApp() {
           <div className="mobile-brand"><BookOpenCheck size={20} /><strong>RubriLab</strong></div>
           <div className="topbar__context">
             <span>{navItems.find((item) => item.id === view)?.label}</span>
-            <strong>{view === "today" ? "Friday laboratory session" : "3 ESO B · 2026–27"}</strong>
+            <strong>{view === "today" ? "Active laboratory workspace" : "3 ESO B · 2026–27"}</strong>
           </div>
           <span className="storage-note">Stored on this device</span>
         </header>

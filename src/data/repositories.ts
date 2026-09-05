@@ -39,6 +39,7 @@ export interface SessionTeamRepository {
   listBySession(sessionId: string): Promise<SessionTeam[]>;
   put(value: SessionTeam): Promise<void>;
   updateStatus(id: string, status: TeamOperationalStatus): Promise<void>;
+  updateNote(id: string, note?: string): Promise<void>;
 }
 
 export interface AttendanceRepository {

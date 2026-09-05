@@ -24,11 +24,12 @@ test("server renders the RubriLab application shell", async () => {
 });
 
 test("keeps persistence and domain concerns separated", async () => {
-  const [page, repositories, domain, dataLayer] = await Promise.all([
+  const [page, repositories, domain, dataLayer, activeSession] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/data/repositories.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/domain/model.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/data/dexie.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/ui/TodayView.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(page, /<LabApp \/>/);
   assert.match(repositories, /interface ClassroomRepository/);
@@ -37,5 +38,9 @@ test("keeps persistence and domain concerns separated", async () => {
   const studentModel = domain.match(/export interface Student \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(studentModel, /address|phone|email|birthday/i);
   assert.match(dataLayer, /class RubriLabDatabase extends Dexie/);
+  assert.match(activeSession, /Mark all present/);
+  assert.match(activeSession, /Finish anyway/);
+  assert.match(activeSession, /behaviourMode/);
+  assert.match(activeSession, /repositories\.practicalResults\.put/);
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
 });

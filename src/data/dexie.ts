@@ -130,6 +130,9 @@ export const repositories: LabRepositories = {
     updateStatus: async (id: string, operationalStatus: TeamOperationalStatus) => {
       await database.teams.update(id, { operationalStatus });
     },
+    updateNote: async (id: string, note?: string) => {
+      await database.teams.update(id, { note: note?.trim() || undefined });
+    },
   },
   attendance: {
     listBySession: (sessionId) => database.attendance.where("sessionId").equals(sessionId).toArray(),
