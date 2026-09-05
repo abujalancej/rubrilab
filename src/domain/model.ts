@@ -177,6 +177,26 @@ export interface BehaviourObservation {
   timestamp: string;
 }
 
+export interface AssessmentPeriod {
+  id: string;
+  classroomId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+}
+
+export interface WeightConfiguration {
+  id: string;
+  classroomId: string;
+  periodId?: string;
+  teamPerformance: number;
+  individualPerformance: number;
+  practicalResult: number;
+  teamCriterionWeights: Record<string, number>;
+  individualCriterionWeights: Record<string, number>;
+}
+
 export interface LabSnapshot {
   classrooms: Classroom[];
   students: Student[];
@@ -190,4 +210,6 @@ export interface LabSnapshot {
   practicalResults: PracticalResult[];
   individualObservations: IndividualObservation[];
   behaviourObservations: BehaviourObservation[];
+  assessmentPeriods: AssessmentPeriod[];
+  weightConfigurations: WeightConfiguration[];
 }

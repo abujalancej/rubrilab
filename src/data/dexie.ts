@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type {
   AssessmentPreset,
+  AssessmentPeriod,
   AttendanceRecord,
   BehaviourObservation,
   Classroom,
@@ -14,9 +15,11 @@ import type {
   TeacherAssistance,
   TeamObservation,
   TeamOperationalStatus,
+  WeightConfiguration,
 } from "@/src/domain/model";
 import {
   attendanceSchema,
+  assessmentPeriodSchema,
   behaviourObservationSchema,
   classroomSchema,
   individualObservationSchema,
@@ -24,6 +27,7 @@ import {
   studentSchema,
   teamObservationSchema,
   teamSchema,
+  weightConfigurationSchema,
 } from "@/src/domain/validation";
 import type { LabRepositories } from "./repositories";
 import { createDemoSnapshot } from "./seed";
@@ -41,6 +45,8 @@ class RubriLabDatabase extends Dexie {
   practicalResults!: Table<PracticalResult, string>;
   individualObservations!: Table<IndividualObservation, string>;
   behaviourObservations!: Table<BehaviourObservation, string>;
+  assessmentPeriods!: Table<AssessmentPeriod, string>;
+  weightConfigurations!: Table<WeightConfiguration, string>;
 
   constructor() {
     super("rubrilab");
@@ -58,6 +64,10 @@ class RubriLabDatabase extends Dexie {
       individualObservations: "id, sessionId, studentId, criterionId, timestamp",
       behaviourObservations: "id, sessionId, studentId, type, category, timestamp",
     });
+    this.version(2).stores({
+      assessmentPeriods: "id, classroomId, startDate, endDate, active",
+      weightConfigurations: "id, classroomId, periodId",
+    });
   }
 }
 
@@ -72,6 +82,8 @@ async function writeSnapshot(snapshot: LabSnapshot): Promise<void> {
   snapshot.teamObservations.forEach((value) => teamObservationSchema.parse(value));
   snapshot.individualObservations.forEach((value) => individualObservationSchema.parse(value));
   snapshot.behaviourObservations.forEach((value) => behaviourObservationSchema.parse(value));
+  snapshot.assessmentPeriods.forEach((value) => assessmentPeriodSchema.parse(value));
+  snapshot.weightConfigurations.forEach((value) => weightConfigurationSchema.parse(value));
 
   await database.transaction("rw", database.tables, async () => {
     await Promise.all(database.tables.map((table) => table.clear()));
@@ -87,12 +99,34 @@ async function writeSnapshot(snapshot: LabSnapshot): Promise<void> {
     await database.practicalResults.bulkPut(snapshot.practicalResults);
     await database.individualObservations.bulkPut(snapshot.individualObservations);
     await database.behaviourObservations.bulkPut(snapshot.behaviourObservations);
+    await database.assessmentPeriods.bulkPut(snapshot.assessmentPeriods);
+    await database.weightConfigurations.bulkPut(snapshot.weightConfigurations);
   });
 }
 
 export async function ensureDemoData(): Promise<void> {
   if ((await database.classrooms.count()) === 0) {
     await writeSnapshot(createDemoSnapshot());
+    return;
+  }
+
+  const isOriginalDemo = await database.classrooms.get("class-3eso-b");
+  const hasHistoricalTeams = (await database.teams.where("sessionId").equals("session-traffic-light").count()) > 0;
+  if (isOriginalDemo && !hasHistoricalTeams) {
+    const demo = createDemoSnapshot();
+    const activeSessionId = "session-obstacle-robot";
+    await database.transaction("rw", database.tables, async () => {
+      await database.sessions.bulkPut(demo.sessions.filter((item) => item.id !== activeSessionId));
+      await database.teams.bulkPut(demo.teams.filter((item) => item.sessionId !== activeSessionId));
+      await database.attendance.bulkPut(demo.attendance.filter((item) => item.sessionId !== activeSessionId));
+      await database.teamObservations.bulkPut(demo.teamObservations.filter((item) => item.sessionId !== activeSessionId));
+      await database.teacherAssistance.bulkPut(demo.teacherAssistance.filter((item) => item.sessionId !== activeSessionId));
+      await database.practicalResults.bulkPut(demo.practicalResults.filter((item) => item.sessionId !== activeSessionId));
+      await database.individualObservations.bulkPut(demo.individualObservations.filter((item) => item.sessionId !== activeSessionId));
+      await database.behaviourObservations.bulkPut(demo.behaviourObservations.filter((item) => item.sessionId !== activeSessionId));
+      await database.assessmentPeriods.bulkPut(demo.assessmentPeriods);
+      await database.weightConfigurations.bulkPut(demo.weightConfigurations);
+    });
   }
 }
 
@@ -178,6 +212,16 @@ export const repositories: LabRepositories = {
       await database.practicalResults.put(value);
     },
   },
+  assessmentConfiguration: {
+    listPeriods: (classroomId) => database.assessmentPeriods.where("classroomId").equals(classroomId).sortBy("startDate"),
+    putPeriod: async (value) => {
+      await database.assessmentPeriods.put(assessmentPeriodSchema.parse(value));
+    },
+    listWeights: (classroomId) => database.weightConfigurations.where("classroomId").equals(classroomId).toArray(),
+    putWeights: async (value) => {
+      await database.weightConfigurations.put(weightConfigurationSchema.parse(value));
+    },
+  },
   exportSnapshot: async () => ({
     classrooms: await database.classrooms.toArray(),
     students: await database.students.toArray(),
@@ -191,6 +235,8 @@ export const repositories: LabRepositories = {
     practicalResults: await database.practicalResults.toArray(),
     individualObservations: await database.individualObservations.toArray(),
     behaviourObservations: await database.behaviourObservations.toArray(),
+    assessmentPeriods: await database.assessmentPeriods.toArray(),
+    weightConfigurations: await database.weightConfigurations.toArray(),
   }),
   importSnapshot: writeSnapshot,
   resetDemo: async () => writeSnapshot(createDemoSnapshot()),

@@ -1,5 +1,6 @@
 import type {
   AssessmentPreset,
+  AssessmentPeriod,
   AttendanceRecord,
   BehaviourObservation,
   Classroom,
@@ -13,6 +14,7 @@ import type {
   TeacherAssistance,
   TeamObservation,
   TeamOperationalStatus,
+  WeightConfiguration,
 } from "@/src/domain/model";
 
 export interface ClassroomRepository {
@@ -77,6 +79,13 @@ export interface PracticalResultRepository {
   put(value: PracticalResult): Promise<void>;
 }
 
+export interface AssessmentConfigurationRepository {
+  listPeriods(classroomId: string): Promise<AssessmentPeriod[]>;
+  putPeriod(value: AssessmentPeriod): Promise<void>;
+  listWeights(classroomId: string): Promise<WeightConfiguration[]>;
+  putWeights(value: WeightConfiguration): Promise<void>;
+}
+
 export interface LabRepositories {
   classrooms: ClassroomRepository;
   students: StudentRepository;
@@ -89,6 +98,7 @@ export interface LabRepositories {
   presets: PresetRepository;
   assistance: AssistanceRepository;
   practicalResults: PracticalResultRepository;
+  assessmentConfiguration: AssessmentConfigurationRepository;
   exportSnapshot(): Promise<LabSnapshot>;
   importSnapshot(snapshot: LabSnapshot): Promise<void>;
   resetDemo(): Promise<void>;

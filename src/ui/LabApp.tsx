@@ -13,7 +13,9 @@ import {
   WifiOff,
 } from "lucide-react";
 import { TodayView } from "./TodayView";
-import { AssessmentView, ClassesView, HistoryView, SettingsView } from "./SecondaryViews";
+import { ClassesView, SettingsView } from "./SecondaryViews";
+import { AssessmentWorkspace } from "./AssessmentWorkspace";
+import { SessionHistoryView } from "./SessionHistoryView";
 import { useLabData } from "./useLabData";
 
 type ViewId = "today" | "classes" | "history" | "assessment" | "settings";
@@ -107,8 +109,8 @@ export function LabApp() {
         <main className="workspace__content">
           {view === "today" && <TodayView data={data} onReload={reload} />}
           {view === "classes" && <ClassesView data={data} />}
-          {view === "history" && <HistoryView data={data} />}
-          {view === "assessment" && <AssessmentView data={data} />}
+          {view === "history" && <SessionHistoryView data={data} />}
+          {view === "assessment" && <AssessmentWorkspace data={data} onReload={reload} />}
           {view === "settings" && <SettingsView data={data} onReload={reload} />}
         </main>
       </div>

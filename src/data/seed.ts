@@ -1,4 +1,5 @@
 import type {
+  AssessmentPeriod,
   AssessmentPreset,
   AttendanceRecord,
   BehaviourObservation,
@@ -12,6 +13,7 @@ import type {
   Student,
   TeacherAssistance,
   TeamObservation,
+  WeightConfiguration,
 } from "@/src/domain/model";
 
 const studentNames = [
@@ -118,6 +120,41 @@ export function createDemoSnapshot(): LabSnapshot {
       status: "completed",
     },
   ];
+  sessions.push(
+    {
+      id: "session-sensor-basics",
+      classroomId: classroom.id,
+      title: "Ultrasonic Sensor Basics",
+      date: localDate(-3),
+      startTime: "09:00",
+      endTime: "10:50",
+      subjectArea: "robotics",
+      status: "completed",
+      notes: "Initial sensor readings and threshold calibration.",
+    },
+    {
+      id: "session-led-matrix",
+      classroomId: classroom.id,
+      title: "LED Matrix Assembly",
+      date: localDate(-10),
+      startTime: "09:00",
+      endTime: "10:50",
+      subjectArea: "digital-electronics",
+      status: "completed",
+      notes: "Assembly and systematic continuity checks.",
+    },
+    {
+      id: "session-tolerance-test",
+      classroomId: classroom.id,
+      title: "Print Tolerance Test",
+      date: localDate(-17),
+      startTime: "09:00",
+      endTime: "10:50",
+      subjectArea: "3d-printing",
+      status: "completed",
+      notes: "Compare designed and printed clearances.",
+    },
+  );
 
   const states = ["working", "needs-help", "working", "working", "working", "finished"] as const;
   const teams: SessionTeam[] = Array.from({ length: 6 }, (_, index) => ({
@@ -287,6 +324,145 @@ export function createDemoSnapshot(): LabSnapshot {
     },
   ];
 
+  const presetBySubject = {
+    robotics: "preset-robotics",
+    "digital-electronics": "preset-electronics",
+    "3d-printing": "preset-printing",
+    generic: "preset-common",
+  } as const;
+
+  sessions.slice(1).forEach((historicalSession, sessionIndex) => {
+    const historicalTeams: SessionTeam[] = Array.from({ length: 6 }, (_, teamIndex) => ({
+      id: historicalSession.id + "-team-" + String(teamIndex + 1),
+      sessionId: historicalSession.id,
+      name: "Team " + String(teamIndex + 1),
+      studentIds: Array.from({ length: 4 }, (_, memberIndex) =>
+        students[(teamIndex * 4 + memberIndex + sessionIndex * 3) % students.length].id,
+      ),
+      operationalStatus: "finished",
+      note: teamIndex === 1 && sessionIndex % 2 === 0 ? "Good task distribution and careful testing." : undefined,
+    }));
+    teams.push(...historicalTeams);
+
+    students.forEach((student, studentIndex) => {
+      const isAbsent = studentIndex === (sessionIndex * 5 + 2) % students.length;
+      const isLate = studentIndex === (sessionIndex * 7 + 6) % students.length;
+      const isEarly = studentIndex === (sessionIndex * 11 + 15) % students.length;
+      const status = isAbsent ? "absent" : isLate ? "late" : isEarly ? "left-early" : "present";
+      const events: AttendanceRecord["events"] = isAbsent ? [] : [
+        {
+          id: "event-" + historicalSession.id + "-" + student.id + "-in",
+          timestamp: at(historicalSession.date, isLate ? "09:13" : "09:00"),
+          kind: isLate ? "arrived-late" : "present",
+        },
+      ];
+      if (isEarly) {
+        events.push({
+          id: "event-" + historicalSession.id + "-" + student.id + "-out",
+          timestamp: at(historicalSession.date, "10:22"),
+          kind: "left-early",
+        });
+      }
+      attendance.push({
+        id: "attendance-" + historicalSession.id + "-" + student.id,
+        studentId: student.id,
+        sessionId: historicalSession.id,
+        status,
+        reason: isAbsent ? "medical" : isEarly ? "authorised" : undefined,
+        events,
+      });
+    });
+
+    const sessionCriteria = criteria
+      .filter((criterion) => criterion.presetId === presetBySubject[historicalSession.subjectArea] && criterion.name !== "Result")
+      .slice(0, 4);
+    historicalTeams.forEach((team, teamIndex) => {
+      sessionCriteria.forEach((criterion, criterionIndex) => {
+        const numericScore = 2 + ((sessionIndex + teamIndex + criterionIndex) % 3);
+        teamObservations.push({
+          id: "team-observation-" + historicalSession.id + "-" + team.id + "-" + criterion.id,
+          teamId: team.id,
+          sessionId: historicalSession.id,
+          criterionId: criterion.id,
+          score: numericScore as 2 | 3 | 4,
+          note: criterionIndex === 2 && teamIndex === 1 ? "Corrected the issue after checking the test sequence." : undefined,
+          timestamp: at(historicalSession.date, "10:08"),
+        });
+      });
+      const assistanceLevel = ((sessionIndex + teamIndex) % 4) as 0 | 1 | 2 | 3;
+      teacherAssistance.push({
+        id: "assistance-" + team.id,
+        teamId: team.id,
+        sessionId: historicalSession.id,
+        level: assistanceLevel,
+        interventionCount: assistanceLevel === 0 ? 0 : assistanceLevel + 1,
+        timestamp: at(historicalSession.date, "10:14"),
+      });
+      practicalResults.push({
+        id: "result-" + team.id,
+        teamId: team.id,
+        sessionId: historicalSession.id,
+        score: (2 + ((sessionIndex + teamIndex * 2) % 3)) as 2 | 3 | 4,
+        timestamp: at(historicalSession.date, "10:38"),
+      });
+    });
+
+    Array.from({ length: 10 }, (_, evidenceIndex) => evidenceIndex).forEach((evidenceIndex) => {
+      const student = students[(sessionIndex * 4 + evidenceIndex * 2) % students.length];
+      const criterion = individualCriteria[(sessionIndex + evidenceIndex) % individualCriteria.length];
+      individualObservations.push({
+        id: "individual-" + historicalSession.id + "-" + student.id + "-" + criterion.id,
+        studentId: student.id,
+        sessionId: historicalSession.id,
+        criterionId: criterion.id,
+        score: (2 + ((sessionIndex + evidenceIndex) % 3)) as 2 | 3 | 4,
+        note: evidenceIndex === 2 ? "Worked independently after the initial demonstration." : undefined,
+        timestamp: at(historicalSession.date, "10:18"),
+      });
+    });
+
+    const positiveStudent = students[(sessionIndex * 3 + 4) % students.length];
+    const incidentStudent = students[(sessionIndex * 5 + 9) % students.length];
+    behaviourObservations.push(
+      {
+        id: "positive-" + historicalSession.id,
+        studentId: positiveStudent.id,
+        sessionId: historicalSession.id,
+        type: "positive",
+        category: sessionIndex % 2 === 0 ? "takes-initiative" : "responsible-equipment-use",
+        timestamp: at(historicalSession.date, "10:06"),
+      },
+      {
+        id: "incident-" + historicalSession.id,
+        studentId: incidentStudent.id,
+        sessionId: historicalSession.id,
+        type: "incident",
+        category: sessionIndex % 2 === 0 ? "distracted" : "inappropriate-phone-use",
+        timestamp: at(historicalSession.date, "09:44"),
+      },
+    );
+  });
+
+  const currentYear = new Date().getFullYear();
+  const assessmentPeriods: AssessmentPeriod[] = [
+    { id: "period-first-term", classroomId: classroom.id, name: "First term", startDate: currentYear + "-09-01", endDate: currentYear + "-12-20", active: true },
+    { id: "period-second-term", classroomId: classroom.id, name: "Second term", startDate: (currentYear + 1) + "-01-07", endDate: (currentYear + 1) + "-03-31", active: false },
+    { id: "period-third-term", classroomId: classroom.id, name: "Third term", startDate: (currentYear + 1) + "-04-01", endDate: (currentYear + 1) + "-06-23", active: false },
+  ];
+
+  const weightConfigurations: WeightConfiguration[] = [{
+    id: "weights-default-3eso-b",
+    classroomId: classroom.id,
+    periodId: "period-first-term",
+    teamPerformance: 25,
+    individualPerformance: 45,
+    practicalResult: 30,
+    teamCriterionWeights: Object.fromEntries(
+      criteria.filter((criterion) => criterion.presetId === "preset-common").map((criterion, index) => [criterion.id, [20, 25, 30, 10, 15][index]]),
+    ),
+    individualCriterionWeights: Object.fromEntries(individualCriteria.map((criterion) => [criterion.id, 20])),
+  }];
+
   return {
     classrooms: [classroom],
     students,
@@ -300,5 +476,7 @@ export function createDemoSnapshot(): LabSnapshot {
     practicalResults,
     individualObservations,
     behaviourObservations,
+    assessmentPeriods,
+    weightConfigurations,
   };
 }

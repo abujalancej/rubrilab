@@ -24,12 +24,14 @@ test("server renders the RubriLab application shell", async () => {
 });
 
 test("keeps persistence and domain concerns separated", async () => {
-  const [page, repositories, domain, dataLayer, activeSession] = await Promise.all([
+  const [page, repositories, domain, dataLayer, activeSession, assessment, history] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/data/repositories.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/domain/model.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/data/dexie.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/ui/TodayView.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/ui/AssessmentWorkspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/ui/SessionHistoryView.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(page, /<LabApp \/>/);
   assert.match(repositories, /interface ClassroomRepository/);
@@ -42,5 +44,11 @@ test("keeps persistence and domain concerns separated", async () => {
   assert.match(activeSession, /Finish anyway/);
   assert.match(activeSession, /behaviourMode/);
   assert.match(activeSession, /repositories\.practicalResults\.put/);
+  assert.match(assessment, /Evidence coverage/);
+  assert.match(assessment, /Students to observe/);
+  assert.match(assessment, /rubrilab-individual-evidence\.csv/);
+  assert.match(history, /Reconstruct attendance, membership and evidence/);
+  assert.match(domain, /interface AssessmentPeriod/);
+  assert.match(domain, /interface WeightConfiguration/);
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
 });

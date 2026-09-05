@@ -245,7 +245,7 @@ function ActiveTeamCard({ team, data, onReload, onStudent, flash }: TeamCardProp
 
       <div className="compact-members">
         {members.map((student) => {
-          const attendance = data.attendance.find((record) => record.studentId === student.id);
+          const attendance = data.attendance.find((record) => record.studentId === student.id && record.sessionId === team.sessionId);
           return (
             <button type="button" key={student.id} onClick={() => onStudent(student.id)} className={cx(attendance?.status === "absent" && "is-absent")}>
               <span className="avatar">{student.firstName[0]}{student.lastName[0]}</span>
@@ -316,7 +316,7 @@ interface StudentPanelProps {
 function StudentPanel({ student, team, session, data, onReload, onClose, flash }: StudentPanelProps) {
   const [behaviourMode, setBehaviourMode] = useState<"positive" | "incident" | null>(null);
   const [editingEvents, setEditingEvents] = useState(false);
-  const attendance = data.attendance.find((record) => record.studentId === student.id);
+  const attendance = data.attendance.find((record) => record.studentId === student.id && record.sessionId === session.id);
   const individualCriteria = data.criteria.filter((criterion) => criterion.scope === "individual");
 
   async function saveAttendance(status: AttendanceStatus) {
@@ -432,7 +432,7 @@ function StudentPanel({ student, team, session, data, onReload, onClose, flash }
             <div className="drawer-section__title"><div><span>Individual evidence</span><small>Record only what you observe</small></div></div>
             <div className="drawer-criteria">
               {individualCriteria.map((criterion) => {
-                const observation = data.individualObservations.find((item) => item.studentId === student.id && item.criterionId === criterion.id);
+                const observation = data.individualObservations.find((item) => item.studentId === student.id && item.sessionId === session.id && item.criterionId === criterion.id);
                 return (
                   <div className="drawer-criterion" key={criterion.id}>
                     <span>{criterion.name}</span>
@@ -485,12 +485,14 @@ function FinishSummary({
   onCancel: () => void;
   onFinish: () => Promise<void>;
 }) {
-  const observedTeamIds = new Set(data.teamObservations.filter((item) => item.score !== undefined).map((item) => item.teamId));
-  const teamsWithoutEvidence = data.teams.filter((team) => !observedTeamIds.has(team.id));
-  const incidentStudentIds = new Set(data.behaviourObservations.filter((item) => item.type === "incident").map((item) => item.studentId));
-  const unfinishedTeams = data.teams.filter((team) => team.operationalStatus !== "finished");
-  const absent = data.attendance.filter((item) => item.status === "absent").length;
-  const exceptions = data.attendance.filter((item) => item.status !== "present").length;
+  const sessionTeams = data.teams.filter((team) => team.sessionId === session.id);
+  const observedTeamIds = new Set(data.teamObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).map((item) => item.teamId));
+  const teamsWithoutEvidence = sessionTeams.filter((team) => !observedTeamIds.has(team.id));
+  const incidentStudentIds = new Set(data.behaviourObservations.filter((item) => item.sessionId === session.id && item.type === "incident").map((item) => item.studentId));
+  const unfinishedTeams = sessionTeams.filter((team) => team.operationalStatus !== "finished");
+  const sessionAttendance = data.attendance.filter((item) => item.sessionId === session.id);
+  const absent = sessionAttendance.filter((item) => item.status === "absent").length;
+  const exceptions = sessionAttendance.filter((item) => item.status !== "present").length;
   return (
     <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="finish-title">
       <section className="finish-dialog">
@@ -501,7 +503,7 @@ function FinishSummary({
           <div className={cx(teamsWithoutEvidence.length > 0 && "has-warning")}><dt>Teams with no observations</dt><dd>{teamsWithoutEvidence.length}</dd></div>
           <div><dt>Students with incidents</dt><dd>{incidentStudentIds.size}</dd></div>
           <div className={cx(unfinishedTeams.length > 0 && "has-warning")}><dt>Unfinished teams</dt><dd>{unfinishedTeams.length}</dd></div>
-          <div><dt>Individual evidence items</dt><dd>{data.individualObservations.filter((item) => item.score !== undefined).length}</dd></div>
+          <div><dt>Individual evidence items</dt><dd>{data.individualObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).length}</dd></div>
         </dl>
         <footer><button type="button" className="button-quiet" onClick={onCancel}>Continue session</button><button type="button" className="finish-anyway" onClick={() => void onFinish()}><Check size={14} />Finish anyway</button></footer>
       </section>
@@ -512,22 +514,24 @@ function FinishSummary({
 export function TodayView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
   const session = data.sessions.find((item) => item.status === "active") ?? data.sessions[0];
   const classroom = data.classrooms.find((item) => item.id === session?.classroomId);
+  const sessionTeams = data.teams.filter((team) => team.sessionId === session?.id);
+  const sessionAttendance = data.attendance.filter((record) => record.sessionId === session?.id);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showFinish, setShowFinish] = useState(false);
   const [message, setMessage] = useState("");
   const [tick, setTick] = useState(0);
   const selectedStudent = data.students.find((student) => student.id === selectedStudentId);
-  const studentTeam = data.teams.find((team) => team.studentIds.includes(selectedStudentId ?? ""));
+  const studentTeam = sessionTeams.find((team) => team.studentIds.includes(selectedStudentId ?? ""));
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 60000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const attendanceCounts = useMemo(() => data.attendance.reduce<Record<AttendanceStatus, number>>(
+  const attendanceCounts = useMemo(() => sessionAttendance.reduce<Record<AttendanceStatus, number>>(
     (counts, record) => ({ ...counts, [record.status]: counts[record.status] + 1 }),
     { present: 0, absent: 0, late: 0, "left-early": 0, partial: 0 },
-  ), [data.attendance]);
+  ), [sessionAttendance]);
 
   function flash(next: string) {
     setMessage(next);
@@ -536,7 +540,7 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
 
   async function markAllPresent() {
     await Promise.all(data.students.map(async (student) => {
-      const existing = data.attendance.find((record) => record.studentId === student.id);
+      const existing = data.attendance.find((record) => record.studentId === student.id && record.sessionId === session.id);
       await repositories.attendance.put({
         id: existing?.id ?? "attendance-" + student.id,
         studentId: student.id,
@@ -583,16 +587,16 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
         <span className="absent-summary"><i />{attendanceCounts.absent} absent</span>
         <span className="late-summary"><i />{attendanceCounts.late} late</span>
         <span className="early-summary"><i />{attendanceCounts["left-early"]} left early</span>
-        <span className="teams-summary">{data.teams.filter((team) => team.operationalStatus === "finished").length}/{data.teams.length} teams finished</span>
+        <span className="teams-summary">{sessionTeams.filter((team) => team.operationalStatus === "finished").length}/{sessionTeams.length} teams finished</span>
       </div>
 
       <div className="active-grid-heading">
         <div><h2>Classroom teams</h2><p>Scores save with one tap. Select a student for attendance, individual evidence or behaviour.</p></div>
-        <span>{data.teamObservations.filter((item) => item.score !== undefined).length} team evidence items</span>
+        <span>{data.teamObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).length} team evidence items</span>
       </div>
 
       <div className="active-team-grid">
-        {data.teams.map((team) => (
+        {sessionTeams.map((team) => (
           <ActiveTeamCard key={team.id} team={team} data={data} onReload={onReload} onStudent={setSelectedStudentId} flash={flash} />
         ))}
       </div>

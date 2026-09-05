@@ -94,3 +94,25 @@ export const behaviourObservationSchema = z.object({
 });
 
 export const assessmentScoreSchema = score;
+
+export const assessmentPeriodSchema = z.object({
+  id: stableId,
+  classroomId: stableId,
+  name: z.string().min(1),
+  startDate: z.iso.date(),
+  endDate: z.iso.date(),
+  active: z.boolean(),
+}).refine((value) => value.startDate <= value.endDate, {
+  message: "Assessment period end date must follow its start date.",
+});
+
+export const weightConfigurationSchema = z.object({
+  id: stableId,
+  classroomId: stableId,
+  periodId: stableId.optional(),
+  teamPerformance: z.number().min(0).max(100),
+  individualPerformance: z.number().min(0).max(100),
+  practicalResult: z.number().min(0).max(100),
+  teamCriterionWeights: z.record(z.string(), z.number().min(0).max(100)),
+  individualCriterionWeights: z.record(z.string(), z.number().min(0).max(100)),
+});
