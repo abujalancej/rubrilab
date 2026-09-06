@@ -54,6 +54,7 @@ export interface Student {
 export interface LabSession {
   id: string;
   classroomId: string;
+  groupName?: string;
   title: string;
   date: string;
   startTime?: string;

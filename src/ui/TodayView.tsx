@@ -163,8 +163,15 @@ function ActiveTeamCard({ team, data, onReload, onStudent, flash }: TeamCardProp
   }
 
   async function updateScore(criterionId: string, score?: AssessmentScore) {
+    const id = "team-score-" + team.id + "-" + criterionId;
+    if (score === undefined) {
+      await repositories.teamObservations.remove(id);
+      await onReload();
+      flash(team.name + " evidence cleared");
+      return;
+    }
     await repositories.teamObservations.put({
-      id: "team-score-" + team.id + "-" + criterionId,
+      id,
       teamId: team.id,
       sessionId: team.sessionId,
       criterionId,
@@ -176,8 +183,15 @@ function ActiveTeamCard({ team, data, onReload, onStudent, flash }: TeamCardProp
   }
 
   async function updateResult(score?: AssessmentScore) {
+    const id = "result-" + team.id;
+    if (score === undefined) {
+      await repositories.practicalResults.remove(id);
+      await onReload();
+      flash(team.name + " result cleared");
+      return;
+    }
     await repositories.practicalResults.put({
-      id: "result-" + team.id,
+      id,
       teamId: team.id,
       sessionId: team.sessionId,
       score,
@@ -366,8 +380,15 @@ function StudentPanel({ student, team, session, data, onReload, onClose, flash }
   }
 
   async function updateIndividual(criterionId: string, score?: AssessmentScore) {
+    const id = "individual-score-" + student.id + "-" + criterionId;
+    if (score === undefined) {
+      await repositories.individualObservations.remove(id);
+      await onReload();
+      flash(student.firstName + " evidence cleared");
+      return;
+    }
     await repositories.individualObservations.put({
-      id: "individual-score-" + student.id + "-" + criterionId,
+      id,
       studentId: student.id,
       sessionId: session.id,
       criterionId,
@@ -486,6 +507,7 @@ function FinishSummary({
   onFinish: () => Promise<void>;
 }) {
   const sessionTeams = data.teams.filter((team) => team.sessionId === session.id);
+  const sessionStudentIds = new Set(sessionTeams.flatMap((team) => team.studentIds));
   const observedTeamIds = new Set(data.teamObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).map((item) => item.teamId));
   const teamsWithoutEvidence = sessionTeams.filter((team) => !observedTeamIds.has(team.id));
   const incidentStudentIds = new Set(data.behaviourObservations.filter((item) => item.sessionId === session.id && item.type === "incident").map((item) => item.studentId));
@@ -499,7 +521,7 @@ function FinishSummary({
         <header><div className="finish-icon"><Flag size={18} /></div><div><span>Session review</span><h2 id="finish-title">Finish “{session.title}”?</h2></div></header>
         <p>Missing evidence is valid. This check is only here to prevent accidental omissions.</p>
         <dl>
-          <div><dt>Attendance</dt><dd>{data.students.length - absent} attended · {exceptions} exceptions</dd></div>
+          <div><dt>Attendance</dt><dd>{sessionStudentIds.size - absent} attended · {exceptions} exceptions</dd></div>
           <div className={cx(teamsWithoutEvidence.length > 0 && "has-warning")}><dt>Teams with no observations</dt><dd>{teamsWithoutEvidence.length}</dd></div>
           <div><dt>Students with incidents</dt><dd>{incidentStudentIds.size}</dd></div>
           <div className={cx(unfinishedTeams.length > 0 && "has-warning")}><dt>Unfinished teams</dt><dd>{unfinishedTeams.length}</dd></div>
@@ -512,9 +534,12 @@ function FinishSummary({
 }
 
 export function TodayView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
-  const session = data.sessions.find((item) => item.status === "active") ?? data.sessions[0];
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const session = data.sessions.find((item) => item.id === selectedSessionId) ?? data.sessions.find((item) => item.status === "active") ?? data.sessions[0];
   const classroom = data.classrooms.find((item) => item.id === session?.classroomId);
   const sessionTeams = data.teams.filter((team) => team.sessionId === session?.id);
+  const sessionStudentIds = new Set(sessionTeams.flatMap((team) => team.studentIds));
+  const sessionStudents = data.students.filter((student) => sessionStudentIds.has(student.id));
   const sessionAttendance = data.attendance.filter((record) => record.sessionId === session?.id);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showFinish, setShowFinish] = useState(false);
@@ -539,7 +564,7 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
   }
 
   async function markAllPresent() {
-    await Promise.all(data.students.map(async (student) => {
+    await Promise.all(sessionStudents.map(async (student) => {
       const existing = data.attendance.find((record) => record.studentId === student.id && record.sessionId === session.id);
       await repositories.attendance.put({
         id: existing?.id ?? "attendance-" + student.id,
@@ -567,13 +592,14 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
     <div className="active-session">
       <header className="active-session__header">
         <div className="active-session__identity">
-          <div className="active-session__class"><span>Classroom</span><strong>{classroom?.name}</strong></div>
+          <div className="active-session__class"><span>Classroom</span><strong>{classroom?.name}</strong><small>{session.groupName ?? "Whole class"}</small></div>
           <div className="active-session__title">
             <span>{session.subjectArea.replace("-", " ")} · {todayLabel(session.date)}</span>
             <h1>{session.title}</h1>
           </div>
         </div>
         <div className="active-session__actions">
+          <label className="session-picker"><span>Session</span><select value={session.id} onChange={(event) => setSelectedSessionId(event.target.value)} aria-label="Choose session">{data.sessions.filter((item) => item.status !== "completed").map((item) => <option key={item.id} value={item.id}>{item.title} · {item.groupName ?? "Whole class"}</option>)}</select></label>
           <span className={"session-mode session-mode--" + session.status}>{session.status === "active" ? <PlayCircle size={13} /> : <Check size={13} />}{session.status}</span>
           <span className="elapsed"><Timer size={14} />{elapsedLabel(session, tick)}</span>
           <button type="button" className="mark-present" onClick={() => void markAllPresent()}><UserCheck size={15} />Mark all present</button>
@@ -582,7 +608,7 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
       </header>
 
       <div className="active-session__summary">
-        <span><Users size={14} /><strong>{data.students.length}</strong> students</span>
+        <span><Users size={14} /><strong>{sessionStudents.length}</strong> students</span>
         <span className="present-summary"><i />{attendanceCounts.present} present</span>
         <span className="absent-summary"><i />{attendanceCounts.absent} absent</span>
         <span className="late-summary"><i />{attendanceCounts.late} late</span>

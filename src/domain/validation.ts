@@ -36,6 +36,7 @@ export const studentSchema = z.object({
 export const sessionSchema = z.object({
   id: stableId,
   classroomId: stableId,
+  groupName: z.string().min(1).optional(),
   title: z.string().min(1),
   date: z.iso.date(),
   startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),

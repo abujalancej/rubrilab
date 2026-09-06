@@ -155,6 +155,29 @@ export const repositories: LabRepositories = {
     put: async (value) => {
       await database.sessions.put(sessionSchema.parse(value));
     },
+    remove: async (id) => {
+      await database.transaction("rw", [
+        database.sessions,
+        database.teams,
+        database.attendance,
+        database.teamObservations,
+        database.teacherAssistance,
+        database.practicalResults,
+        database.individualObservations,
+        database.behaviourObservations,
+      ], async () => {
+        await Promise.all([
+          database.teams.where("sessionId").equals(id).delete(),
+          database.attendance.where("sessionId").equals(id).delete(),
+          database.teamObservations.where("sessionId").equals(id).delete(),
+          database.teacherAssistance.where("sessionId").equals(id).delete(),
+          database.practicalResults.where("sessionId").equals(id).delete(),
+          database.individualObservations.where("sessionId").equals(id).delete(),
+          database.behaviourObservations.where("sessionId").equals(id).delete(),
+        ]);
+        await database.sessions.delete(id);
+      });
+    },
   },
   teams: {
     listBySession: (sessionId) => database.teams.where("sessionId").equals(sessionId).sortBy("name"),
@@ -179,12 +202,14 @@ export const repositories: LabRepositories = {
     put: async (value) => {
       await database.teamObservations.put(teamObservationSchema.parse(value));
     },
+    remove: (id) => database.teamObservations.delete(id).then(() => undefined),
   },
   individualObservations: {
     listBySession: (sessionId) => database.individualObservations.where("sessionId").equals(sessionId).toArray(),
     put: async (value) => {
       await database.individualObservations.put(individualObservationSchema.parse(value));
     },
+    remove: (id) => database.individualObservations.delete(id).then(() => undefined),
   },
   behaviourObservations: {
     listBySession: (sessionId) => database.behaviourObservations.where("sessionId").equals(sessionId).toArray(),
@@ -211,6 +236,7 @@ export const repositories: LabRepositories = {
       }
       await database.practicalResults.put(value);
     },
+    remove: (id) => database.practicalResults.delete(id).then(() => undefined),
   },
   assessmentConfiguration: {
     listPeriods: (classroomId) => database.assessmentPeriods.where("classroomId").equals(classroomId).sortBy("startDate"),

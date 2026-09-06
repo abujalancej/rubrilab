@@ -35,6 +35,7 @@ export interface SessionRepository {
   listByClassroom(classroomId: string): Promise<LabSession[]>;
   get(id: string): Promise<LabSession | undefined>;
   put(value: LabSession): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface SessionTeamRepository {
@@ -52,11 +53,13 @@ export interface AttendanceRepository {
 export interface TeamObservationRepository {
   listBySession(sessionId: string): Promise<TeamObservation[]>;
   put(value: TeamObservation): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface IndividualObservationRepository {
   listBySession(sessionId: string): Promise<IndividualObservation[]>;
   put(value: IndividualObservation): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface BehaviourObservationRepository {
@@ -77,6 +80,7 @@ export interface AssistanceRepository {
 export interface PracticalResultRepository {
   listBySession(sessionId: string): Promise<PracticalResult[]>;
   put(value: PracticalResult): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface AssessmentConfigurationRepository {

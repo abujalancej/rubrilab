@@ -8,11 +8,14 @@ import {
   ChevronRight,
   Clock3,
   Filter,
+  Plus,
+  Trash2,
   Users,
   X,
 } from "lucide-react";
-import type { LabSession, Student, SubjectArea } from "@/src/domain/model";
+import { repositories } from "@/src/data/dexie";
 import type { LabData } from "./useLabData";
+import type { LabSession, Student, SubjectArea } from "@/src/domain/model";
 
 const subjectLabels: Record<SubjectArea, string> = {
   robotics: "Robotics",
@@ -23,6 +26,122 @@ const subjectLabels: Record<SubjectArea, string> = {
 
 function prettyDate(date: string): string {
   return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).format(new Date(date + "T12:00:00"));
+}
+
+function localDate(): string {
+  const date = new Date();
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+function NewSessionDialog({ data, onClose, onCreated }: { data: LabData; onClose: () => void; onCreated: () => Promise<void> }) {
+  const [classroomId, setClassroomId] = useState(data.classrooms[0]?.id ?? "");
+  const [groupName, setGroupName] = useState("Whole class");
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(localDate);
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:50");
+  const [subjectArea, setSubjectArea] = useState<SubjectArea>("robotics");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
+
+  const groupOptions = Array.from(new Set(
+    data.teams
+      .filter((team) => data.sessions.find((session) => session.id === team.sessionId)?.classroomId === classroomId)
+      .map((team) => team.name),
+  ));
+
+  async function createSession() {
+    const cleanTitle = title.trim();
+    const cleanGroup = groupName.trim() || "Whole class";
+    if (!classroomId || !cleanTitle || !date) {
+      setError("Choose a class and date, and add a session title.");
+      return;
+    }
+    const students = data.students.filter((student) => student.classroomId === classroomId && student.active);
+    const previousTeam = data.teams.find((team) => team.name === cleanGroup && data.sessions.find((session) => session.id === team.sessionId)?.classroomId === classroomId);
+    const memberIds = previousTeam?.studentIds ?? students.map((student) => student.id);
+    if (!memberIds.length) {
+      setError("This class has no active students to add to the session.");
+      return;
+    }
+
+    const sessionId = "session-" + crypto.randomUUID();
+    const teamId = sessionId + "-group";
+    await repositories.sessions.put({
+      id: sessionId,
+      classroomId,
+      groupName: cleanGroup,
+      title: cleanTitle,
+      date,
+      startTime,
+      endTime,
+      subjectArea,
+      status: "active",
+      notes: notes.trim() || undefined,
+    });
+    await repositories.teams.put({
+      id: teamId,
+      sessionId,
+      name: cleanGroup,
+      studentIds: memberIds,
+      operationalStatus: "not-started",
+    });
+    await Promise.all(memberIds.map((studentId) => repositories.attendance.put({
+      id: "attendance-" + sessionId + "-" + studentId,
+      studentId,
+      sessionId,
+      status: "present",
+      events: [],
+    })));
+    await onCreated();
+    onClose();
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
+      <section className="session-dialog">
+        <header><div className="finish-icon"><Plus size={18} /></div><div><span>New practical session</span><h2 id="new-session-title">Create session</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+        <div className="session-form">
+          <label>Class<select value={classroomId} onChange={(event) => setClassroomId(event.target.value)}>{data.classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+          <label>Group<input list="session-groups" value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Whole class or Group A" /><datalist id="session-groups"><option value="Whole class" />{groupOptions.map((group) => <option key={group} value={group} />)}</datalist></label>
+          <label className="session-form__wide">Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Sensor calibration" autoFocus /></label>
+          <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+          <label>Subject<select value={subjectArea} onChange={(event) => setSubjectArea(event.target.value as SubjectArea)}><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option><option value="generic">General</option></select></label>
+          <label>From<input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
+          <label>To<input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
+          <label className="session-form__wide">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} placeholder="Optional session note" /></label>
+        </div>
+        <p className="session-dialog__hint">If you choose an existing group, its student membership is copied into this session. “Whole class” includes all active students in the selected class.</p>
+        {error && <p className="session-dialog__error" role="alert">{error}</p>}
+        <footer><button type="button" className="button-quiet" onClick={onClose}>Cancel</button><button type="button" className="finish-anyway" onClick={() => void createSession()}><Plus size={14} />Create session</button></footer>
+      </section>
+    </div>
+  );
+}
+
+function DeleteSessionDialog({ session, data, onClose, onDeleted }: { session: LabSession; data: LabData; onClose: () => void; onDeleted: () => Promise<void> }) {
+  const teams = data.teams.filter((team) => team.sessionId === session.id);
+  const attendance = data.attendance.filter((item) => item.sessionId === session.id);
+  const evidence = data.teamObservations.filter((item) => item.sessionId === session.id).length + data.individualObservations.filter((item) => item.sessionId === session.id).length;
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDelete() {
+    setDeleting(true);
+    await repositories.sessions.remove(session.id);
+    await onDeleted();
+    onClose();
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-session-title">
+      <section className="finish-dialog session-delete-dialog">
+        <header><div className="finish-icon finish-icon--danger"><Trash2 size={18} /></div><div><span>Permanent action</span><h2 id="delete-session-title">Delete session?</h2></div></header>
+        <p>This will permanently remove “{session.title}” and all its attendance, group membership and evidence records. This cannot be undone.</p>
+        <dl><div><dt>Date</dt><dd>{prettyDate(session.date)}</dd></div><div><dt>Groups</dt><dd>{teams.length}</dd></div><div><dt>Attendance records</dt><dd>{attendance.length}</dd></div><div><dt>Evidence records</dt><dd>{evidence}</dd></div></dl>
+        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={deleting}>Keep session</button><button type="button" className="delete-session-button" onClick={() => void confirmDelete()} disabled={deleting}><Trash2 size={14} />{deleting ? "Deleting…" : "Delete permanently"}</button></footer>
+      </section>
+    </div>
+  );
 }
 
 function SessionDetail({ session, data, onClose }: { session: LabSession; data: LabData; onClose: () => void }) {
@@ -36,7 +155,7 @@ function SessionDetail({ session, data, onClose }: { session: LabSession; data: 
       <button type="button" className="history-scrim" onClick={onClose} aria-label="Close session history" />
       <aside className="history-drawer" aria-label={session.title + " session record"}>
         <header>
-          <div><span>{prettyDate(session.date)} · {subjectLabels[session.subjectArea]}</span><h2>{session.title}</h2><p>3 ESO B · {session.startTime}–{session.endTime}</p></div>
+          <div><span>{prettyDate(session.date)} · {subjectLabels[session.subjectArea]}</span><h2>{session.title}</h2><p>{data.classrooms.find((item) => item.id === session.classroomId)?.name} · {session.groupName ?? "Whole class"} · {session.startTime}–{session.endTime}</p></div>
           <button type="button" className="icon-button" onClick={onClose}><X size={18} /></button>
         </header>
         <div className="history-drawer__body">
@@ -108,12 +227,14 @@ function SessionDetail({ session, data, onClose }: { session: LabSession; data: 
   );
 }
 
-export function SessionHistoryView({ data }: { data: LabData }) {
+export function SessionHistoryView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
   const [classroomId, setClassroomId] = useState("all");
   const [subject, setSubject] = useState("all");
   const [status, setStatus] = useState("all");
   const [date, setDate] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showNewSession, setShowNewSession] = useState(false);
+  const [deleteSession, setDeleteSession] = useState<LabSession | null>(null);
   const selected = data.sessions.find((session) => session.id === selectedId);
   const sessions = data.sessions.filter((session) =>
     (classroomId === "all" || session.classroomId === classroomId) &&
@@ -123,7 +244,7 @@ export function SessionHistoryView({ data }: { data: LabData }) {
   );
   return (
     <div className="session-history-workspace">
-      <header className="history-header"><div><span className="eyebrow">Evidence archive</span><h1>Session history</h1><p>Reconstruct attendance, membership and evidence exactly as recorded.</p></div></header>
+      <header className="history-header"><div><span className="eyebrow">Evidence archive</span><h1>Session history</h1><p>Reconstruct attendance, membership and evidence exactly as recorded.</p></div><button type="button" className="new-session-button" onClick={() => setShowNewSession(true)}><Plus size={15} />New session</button></header>
       <section className="history-filters">
         <span><Filter size={13} />Filters</span>
         <label>Classroom<select value={classroomId} onChange={(event) => setClassroomId(event.target.value)}><option value="all">All classes</option>{data.classrooms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
@@ -140,20 +261,22 @@ export function SessionHistoryView({ data }: { data: LabData }) {
           const evidence = data.teamObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).length +
             data.individualObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).length;
           return (
-            <button type="button" className="history-session-row" key={session.id} onClick={() => setSelectedId(session.id)}>
+            <div className="history-session-row" key={session.id} role="button" tabIndex={0} onClick={() => setSelectedId(session.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(session.id); } }}>
               <span className={"history-subject history-subject--" + session.subjectArea}><CalendarDays size={17} /></span>
               <span className="history-date"><strong>{prettyDate(session.date)}</strong><small><Clock3 size={10} />{session.startTime}–{session.endTime}</small></span>
-              <span className="history-title"><strong>{session.title}</strong><small>{subjectLabels[session.subjectArea]} · {data.classrooms.find((item) => item.id === session.classroomId)?.name}</small></span>
+              <span className="history-title"><strong>{session.title}</strong><small>{subjectLabels[session.subjectArea]} · {data.classrooms.find((item) => item.id === session.classroomId)?.name} · {session.groupName ?? "Whole class"}</small></span>
               <span className="history-fact"><Users size={12} />{teams.length} teams</span>
               <span className="history-fact">{attendance.filter((item) => item.status !== "absent").length}/{attendance.length} attended</span>
               <span className="history-fact">{evidence} evidence</span>
               <span className={"history-status history-status--" + session.status}>{session.status}</span>
-              <ChevronRight size={15} />
-            </button>
+              <span className="history-row-actions"><ChevronRight size={15} /><button type="button" className="history-delete-button" aria-label={"Delete " + session.title} title="Delete session" onClick={(event) => { event.stopPropagation(); setDeleteSession(session); }}><Trash2 size={14} /></button></span>
+            </div>
           );
         })}
       </section>
       {selected && <SessionDetail session={selected} data={data} onClose={() => setSelectedId(null)} />}
+      {showNewSession && <NewSessionDialog data={data} onClose={() => setShowNewSession(false)} onCreated={onReload} />}
+      {deleteSession && <DeleteSessionDialog session={deleteSession} data={data} onClose={() => setDeleteSession(null)} onDeleted={async () => { setSelectedId(null); await onReload(); }} />}
     </div>
   );
 }

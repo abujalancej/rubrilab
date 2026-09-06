@@ -72,6 +72,9 @@ export function LabApp() {
     );
   }
 
+  const contextSession = data.sessions.find((session) => session.status === "active") ?? data.sessions[0];
+  const contextClassroom = data.classrooms.find((classroom) => classroom.id === contextSession?.classroomId);
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -101,7 +104,7 @@ export function LabApp() {
           <div className="mobile-brand"><BookOpenCheck size={20} /><strong>RubriLab</strong></div>
           <div className="topbar__context">
             <span>{navItems.find((item) => item.id === view)?.label}</span>
-            <strong>{view === "today" ? "Active laboratory workspace" : "3 ESO B · 2026–27"}</strong>
+            <strong>{view === "today" ? "Active laboratory workspace" : (contextClassroom?.name ?? "Classroom workspace") + " · " + (contextSession?.groupName ?? "Whole class")}</strong>
           </div>
           <span className="storage-note">Stored on this device</span>
         </header>
@@ -109,7 +112,7 @@ export function LabApp() {
         <main className="workspace__content">
           {view === "today" && <TodayView data={data} onReload={reload} />}
           {view === "classes" && <ClassesView data={data} />}
-          {view === "history" && <SessionHistoryView data={data} />}
+          {view === "history" && <SessionHistoryView data={data} onReload={reload} />}
           {view === "assessment" && <AssessmentWorkspace data={data} onReload={reload} />}
           {view === "settings" && <SettingsView data={data} onReload={reload} />}
         </main>
