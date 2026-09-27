@@ -7,17 +7,22 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: { default: "RubriLab", template: "%s · RubriLab" },
-  description: "Professional, offline-first evidence capture for secondary-school practical laboratories.",
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  description: "A local app for organising laboratory sessions, student groups and assessment evidence while teaching.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/rubrilab-icon-transparent.png", sizes: "1254x1254", type: "image/png" }],
+    shortcut: "/rubrilab-icon-transparent.png",
+    apple: "/rubrilab-icon-transparent.png",
+  },
   openGraph: {
     title: "RubriLab",
-    description: "Practical evidence, captured while teaching.",
+    description: "Laboratory sessions, groups and assessment evidence — all while teaching.",
     images: ["https://rubrilab-laboratory.escolagrancapita.chatgpt.site/og.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: "RubriLab",
-    description: "Practical evidence, captured while teaching.",
+    description: "Laboratory sessions, groups and assessment evidence — all while teaching.",
     images: ["https://rubrilab-laboratory.escolagrancapita.chatgpt.site/og.png"],
   },
 };

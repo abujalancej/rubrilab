@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useState, type ComponentType } from "react";
+import packageInfo from "../../package.json";
 import {
   Archive,
-  BookOpenCheck,
   CalendarDays,
-  CheckCircle2,
+  CircleAlert,
   ClipboardCheck,
-  GraduationCap,
   Settings2,
   Users,
-  WifiOff,
 } from "lucide-react";
 import { TodayView } from "./TodayView";
 import { ClassesView, SettingsView } from "./SecondaryViews";
@@ -35,37 +33,29 @@ function viewFromHash(): ViewId {
 
 export function LabApp() {
   const { data, error, reload } = useLabData();
-  const [view, setView] = useState<ViewId>("today");
-  const [online, setOnline] = useState(true);
+  const [view, setView] = useState<ViewId>(() => typeof window === "undefined" ? "today" : viewFromHash());
 
   useEffect(() => {
-    setView(viewFromHash());
-    setOnline(navigator.onLine);
     const onHash = () => setView(viewFromHash());
-    const onOnline = () => setOnline(navigator.onLine);
     window.addEventListener("hashchange", onHash);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOnline);
     return () => {
       window.removeEventListener("hashchange", onHash);
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOnline);
     };
   }, []);
 
   function navigate(id: ViewId) {
-    window.location.hash = "/" + id;
+    window.location.assign("#/" + id);
     setView(id);
   }
 
   if (error) {
-    return <main className="startup-state"><WifiOff size={28} /><h1>Local data could not be opened</h1><p>{error}</p><button onClick={() => void reload()}>Try again</button></main>;
+    return <main className="startup-state"><CircleAlert size={28} /><h1>Local data could not be opened</h1><p>{error}</p><button onClick={() => void reload()}>Try again</button></main>;
   }
 
   if (!data) {
     return (
       <main className="startup-state">
-        <div className="loader-mark"><GraduationCap size={25} /></div>
+        <img className="startup-logo" src="/rubrilab-icon-transparent.png" alt="RubriLab" />
         <h1>Preparing today’s laboratory</h1>
         <p>Opening your local classroom records…</p>
       </main>
@@ -79,39 +69,39 @@ export function LabApp() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand__mark"><BookOpenCheck size={22} /></div>
+          <div className="brand__mark">
+            <img className="brand__icon" src="/rubrilab-icon-transparent.png" alt="RubriLab app icon" />
+          </div>
           <div><strong>RubriLab</strong><span>Practical evidence</span></div>
         </div>
         <nav aria-label="Main navigation">
           {navItems.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" className={view === id ? "is-active" : ""} onClick={() => navigate(id)}>
               <Icon size={18} /><span>{label}</span>
-              {id === "today" && <span className="nav-live" aria-label="Active session" />}
+              {id === "today" && data.sessions.some((session) => session.status === "active") && <span className="nav-live" aria-label="Active session" />}
             </button>
           ))}
         </nav>
         <div className="sidebar__footer">
-          <span className={"connection-status " + (online ? "" : "is-offline")}>
-            {online ? <CheckCircle2 size={14} /> : <WifiOff size={14} />}
-            {online ? "Ready offline" : "Working offline"}
-          </span>
-          <div className="teacher-chip"><span>AB</span><div><strong>Teacher workspace</strong><small>2026–27</small></div></div>
+          <small className="app-version">RubriLab v{packageInfo.version} by <a href="https://github.com/abujalancej/rubrilab" target="_blank" rel="noreferrer">abujalancej</a></small>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="topbar">
-          <div className="mobile-brand"><BookOpenCheck size={20} /><strong>RubriLab</strong></div>
+          <div className="mobile-brand">
+            <img className="mobile-brand__icon" src="/rubrilab-icon-transparent.png" alt="RubriLab" />
+            <span><strong>RubriLab</strong><small>v{packageInfo.version}</small></span>
+          </div>
           <div className="topbar__context">
             <span>{navItems.find((item) => item.id === view)?.label}</span>
             <strong>{view === "today" ? "Active laboratory workspace" : (contextClassroom?.name ?? "Classroom workspace") + " · " + (contextSession?.groupName ?? "Whole class")}</strong>
           </div>
-          <span className="storage-note">Stored on this device</span>
         </header>
 
         <main className="workspace__content">
-          {view === "today" && <TodayView data={data} onReload={reload} />}
-          {view === "classes" && <ClassesView data={data} />}
+          {view === "today" && <TodayView data={data} onReload={reload} onCreateSession={() => navigate("history")} />}
+          {view === "classes" && <ClassesView data={data} onReload={reload} />}
           {view === "history" && <SessionHistoryView data={data} onReload={reload} />}
           {view === "assessment" && <AssessmentWorkspace data={data} onReload={reload} />}
           {view === "settings" && <SettingsView data={data} onReload={reload} />}

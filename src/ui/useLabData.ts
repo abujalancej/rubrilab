@@ -71,9 +71,9 @@ export function useLabData() {
   }, []);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => void load());
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js");
+      void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update());
     }
   }, [load]);
 
