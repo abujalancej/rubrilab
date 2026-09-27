@@ -17,13 +17,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "RubriLab",
     description: "Laboratory sessions, groups and assessment evidence — all while teaching.",
-    images: ["https://rubrilab-laboratory.escolagrancapita.chatgpt.site/og.png"],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "RubriLab",
     description: "Laboratory sessions, groups and assessment evidence — all while teaching.",
-    images: ["https://rubrilab-laboratory.escolagrancapita.chatgpt.site/og.png"],
   },
 };
 
