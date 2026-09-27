@@ -1,7 +1,9 @@
 {
   "name": "rubrilab",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
+  "main": "electron/main.mjs",
+  "description": "A local app for organising laboratory sessions, student groups and assessment evidence while teaching.",
   "engines": {
     "node": ">=22.13.0"
   },
@@ -9,8 +11,11 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "electron:dev": "node scripts/electron-dev.mjs",
+    "electron:build": "npm run build && electron-builder --dir",
+    "electron:dist": "npm run build && electron-builder",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern release"
   },
   "dependencies": {
     "dexie": "^4.4.5",
@@ -18,6 +23,7 @@
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "vinext": "^0.0.50",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -29,14 +35,45 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "react-server-dom-webpack": "19.2.6",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
-    "vinext": "0.0.50",
     "vite": "8.0.13",
     "wrangler": "4.92.0"
   },
-  "type": "module"
+  "type": "module",
+  "build": {
+    "appId": "com.rubrilab.app",
+    "productName": "RubriLab",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": false,
+    "icon": "public/rubrilab-icon-transparent.png",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.mjs"
+    },
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "category": "Education",
+      "target": ["AppImage"]
+    }
+  }
 }
