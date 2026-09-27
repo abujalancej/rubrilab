@@ -25,4 +25,4 @@ This starts the local RubriLab server and opens it in Electron. To create a loca
 npm run electron:build
 ```
 
-The generated app is placed under `release/` and is intentionally ignored by Git. DMG, EXE, and ZIP files use `RubriLab-<version>-<os>-<arch>.<ext>`.
+Desktop artifacts are grouped by platform: `out/mac/` on macOS, `out/win/` on Windows, and `out/linux/` on Linux. They are intentionally ignored by Git. DMG, EXE, and ZIP files use `RubriLab-<version>-<os>-<arch>.<ext>`.
