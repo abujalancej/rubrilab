@@ -68,10 +68,37 @@ class RubriLabDatabase extends Dexie {
       assessmentPeriods: "id, classroomId, startDate, endDate, active",
       weightConfigurations: "id, classroomId, periodId",
     });
+    this.version(3).stores({}).upgrade(async (transaction) => {
+      await Promise.all([
+        transaction.table("sessions").clear(),
+        transaction.table("teams").clear(),
+        transaction.table("attendance").clear(),
+        transaction.table("teamObservations").clear(),
+        transaction.table("teacherAssistance").clear(),
+        transaction.table("practicalResults").clear(),
+        transaction.table("individualObservations").clear(),
+        transaction.table("behaviourObservations").clear(),
+      ]);
+    });
   }
 }
 
 const database = new RubriLabDatabase();
+
+function createStarterSnapshot(): LabSnapshot {
+  const snapshot = createDemoSnapshot();
+  return {
+    ...snapshot,
+    sessions: [],
+    teams: [],
+    attendance: [],
+    teamObservations: [],
+    teacherAssistance: [],
+    practicalResults: [],
+    individualObservations: [],
+    behaviourObservations: [],
+  };
+}
 
 async function writeSnapshot(snapshot: LabSnapshot): Promise<void> {
   snapshot.classrooms.forEach((value) => classroomSchema.parse(value));
@@ -106,27 +133,7 @@ async function writeSnapshot(snapshot: LabSnapshot): Promise<void> {
 
 export async function ensureDemoData(): Promise<void> {
   if ((await database.classrooms.count()) === 0) {
-    await writeSnapshot(createDemoSnapshot());
-    return;
-  }
-
-  const isOriginalDemo = await database.classrooms.get("class-3eso-b");
-  const hasHistoricalTeams = (await database.teams.where("sessionId").equals("session-traffic-light").count()) > 0;
-  if (isOriginalDemo && !hasHistoricalTeams) {
-    const demo = createDemoSnapshot();
-    const activeSessionId = "session-obstacle-robot";
-    await database.transaction("rw", database.tables, async () => {
-      await database.sessions.bulkPut(demo.sessions.filter((item) => item.id !== activeSessionId));
-      await database.teams.bulkPut(demo.teams.filter((item) => item.sessionId !== activeSessionId));
-      await database.attendance.bulkPut(demo.attendance.filter((item) => item.sessionId !== activeSessionId));
-      await database.teamObservations.bulkPut(demo.teamObservations.filter((item) => item.sessionId !== activeSessionId));
-      await database.teacherAssistance.bulkPut(demo.teacherAssistance.filter((item) => item.sessionId !== activeSessionId));
-      await database.practicalResults.bulkPut(demo.practicalResults.filter((item) => item.sessionId !== activeSessionId));
-      await database.individualObservations.bulkPut(demo.individualObservations.filter((item) => item.sessionId !== activeSessionId));
-      await database.behaviourObservations.bulkPut(demo.behaviourObservations.filter((item) => item.sessionId !== activeSessionId));
-      await database.assessmentPeriods.bulkPut(demo.assessmentPeriods);
-      await database.weightConfigurations.bulkPut(demo.weightConfigurations);
-    });
+    await writeSnapshot(createStarterSnapshot());
   }
 }
 
@@ -220,6 +227,12 @@ export const repositories: LabRepositories = {
   presets: {
     list: () => database.presets.toArray(),
     listCriteria: () => database.criteria.orderBy("position").toArray(),
+    put: async (value) => {
+      await database.presets.put(value);
+    },
+    putCriterion: async (value) => {
+      await database.criteria.put(value);
+    },
   },
   assistance: {
     listBySession: (sessionId) => database.teacherAssistance.where("sessionId").equals(sessionId).toArray(),
@@ -265,5 +278,5 @@ export const repositories: LabRepositories = {
     weightConfigurations: await database.weightConfigurations.toArray(),
   }),
   importSnapshot: writeSnapshot,
-  resetDemo: async () => writeSnapshot(createDemoSnapshot()),
+  resetDemo: async () => writeSnapshot(createStarterSnapshot()),
 };

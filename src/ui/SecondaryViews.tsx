@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Archive,
   BookOpenCheck,
@@ -7,13 +8,18 @@ import {
   ChevronRight,
   CircleUserRound,
   Download,
+  Pencil,
+  Plus,
   RotateCcw,
   Settings2,
+  Upload,
   Users,
+  X,
 } from "lucide-react";
 import { repositories } from "@/src/data/dexie";
-import type { AttendanceStatus, SubjectArea } from "@/src/domain/model";
+import type { AssessmentPreset, CriterionScope, SubjectArea } from "@/src/domain/model";
 import type { LabData } from "./useLabData";
+import { StudentImportDialog } from "./StudentImportDialog";
 
 const subjectLabels: Record<SubjectArea, string> = {
   robotics: "Robotics",
@@ -22,68 +28,70 @@ const subjectLabels: Record<SubjectArea, string> = {
   generic: "General",
 };
 
-const attendanceLabels: Record<AttendanceStatus, string> = {
-  present: "Present",
-  absent: "Absent",
-  late: "Late",
-  "left-early": "Left early",
-  partial: "Partial",
-};
-
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(
     new Date(date + "T12:00:00"),
   );
 }
 
-export function ClassesView({ data }: { data: LabData }) {
-  const classroom = data.classrooms[0];
+export function ClassesView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
+  const [classroomId, setClassroomId] = useState(data.classrooms[0]?.id ?? "");
+  const [showImport, setShowImport] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const classroom = data.classrooms.find((item) => item.id === classroomId) ?? data.classrooms[0];
+  const classroomStudents = data.students
+    .filter((student) => student.classroomId === classroom?.id)
+    .sort((left, right) => `${left.lastName} ${left.firstName}`.localeCompare(`${right.lastName} ${right.firstName}`));
+  const groups = Array.from(new Set(classroomStudents.map((student) => student.groupName).filter((name): name is string => Boolean(name)))).sort();
+  const activeStudents = data.students.filter((student) => student.active).length;
+  const loadedGroups = new Set(data.students.map((student) => student.groupName).filter(Boolean)).size;
+
   return (
     <div className="view-stack">
-      <section className="class-overview">
-        <div className="class-monogram">3B</div>
-        <div className="class-overview__copy">
-          <span className="eyebrow">Active class</span>
-          <h1>{classroom?.name}</h1>
-          <p>{classroom?.academicYear} · {data.students.filter((student) => student.active).length} active students</p>
+      <section className="surface class-import">
+        <div className="surface__header">
+          <div><span className="eyebrow">1 · Classroom package</span><h1>Import classes</h1><p>Load one CSV or JSON package containing every class, student and laboratory group.</p></div>
+          <button className="button-secondary" type="button" onClick={() => setShowImport(true)}><Upload size={15} />Import package</button>
         </div>
-        <div className="class-overview__stats">
-          <div><strong>{data.sessions.length}</strong><span>practical sessions</span></div>
-          <div><strong>{data.individualObservations.length}</strong><span>individual observations</span></div>
+        <div className="class-import__details">
+          <p><strong>One file, one source of truth.</strong> The class and group columns are read directly from the package; this screen does not ask for manual corrections.</p>
+          <span>Accepted formats: <strong>.csv</strong> and <strong>.json</strong></span>
         </div>
       </section>
 
-      <section className="surface">
+      <section className="surface class-catalog">
         <div className="surface__header">
-          <div><h2>Students</h2><p>Only classroom-essential information is stored.</p></div>
-          <span className="record-count">{data.students.length} records</span>
+          <div><span className="eyebrow">2 · Imported data</span><h2>Classroom viewer</h2><p>{data.classrooms.length} classes · {activeStudents} active students · {loadedGroups} laboratory groups loaded</p></div>
+          {data.classrooms.length > 0 && <label className="class-selector"><span className="sr-only">Select class</span><select value={classroom?.id ?? ""} onChange={(event) => setClassroomId(event.target.value)}>{data.classrooms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         </div>
-        <div className="student-table" role="table" aria-label="Student list">
-          <div className="student-row student-row--header" role="row">
-            <span>Student</span><span>Session attendance</span><span>Evidence</span><span />
+        {classroom ? <>
+          <div className="class-catalog__summary">
+            <div><span>Class</span><strong>{classroom.name}</strong></div>
+            <div><span>Academic year</span><strong>{classroom.academicYear}</strong></div>
+            <div><span>Students</span><strong>{classroomStudents.filter((student) => student.active).length}</strong></div>
+            <div><span>Laboratory groups</span><strong>{groups.length || "—"}</strong></div>
           </div>
-          {data.students.map((student, index) => {
-            const attendance = data.attendance.find((record) => record.studentId === student.id);
-            const evidence = data.individualObservations.filter((item) => item.studentId === student.id).length;
-            return (
-              <div className="student-row" role="row" key={student.id}>
-                <span className="student-identity">
-                  <span className="row-number">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="avatar avatar--large">{student.firstName[0]}{student.lastName[0]}</span>
-                  <span><strong>{student.lastName}, {student.firstName}</strong><small>{student.shortName}</small></span>
-                </span>
-                <span>
-                  <span className={"attendance-badge attendance-badge--" + (attendance?.status ?? "present")}>
-                    {attendanceLabels[attendance?.status ?? "present"]}
-                  </span>
-                </span>
-                <span className="evidence-count">{evidence ? String(evidence) + " observation" + (evidence === 1 ? "" : "s") : "Not observed"}</span>
-                <span><ChevronRight size={16} /></span>
-              </div>
-            );
-          })}
-        </div>
+          <div className="class-viewer" role="table" aria-label={`${classroom.name} imported roster`}>
+            <div className="class-viewer__row class-viewer__row--header" role="row"><span>Student</span><span>Laboratory group</span><span>School ID</span></div>
+            {classroomStudents.map((student, index) => <div className="class-viewer__row" role="row" key={student.id}><span><small>{String(index + 1).padStart(2, "0")}</small><strong>{student.lastName}, {student.firstName}</strong></span><span>{student.groupName ?? "Unassigned"}</span><span>{student.externalId ?? "—"}</span></div>)}
+            {classroomStudents.length === 0 && <div className="student-table__empty"><Users size={24} /><strong>No students in this class</strong><span>Import the school package to view students and laboratory groups here.</span></div>}
+          </div>
+        </> : <div className="student-table__empty"><Users size={24} /><strong>No classroom package loaded</strong><span>Import a CSV or JSON package to inspect its classes, students and groups.</span></div>}
       </section>
+      {importNotice && <p className="session-toast" role="status"><Check size={14} />{importNotice}</p>}
+      {showImport && (
+        <StudentImportDialog
+          classrooms={data.classrooms}
+          students={data.students}
+          defaultClassroomId={undefined}
+          onClose={() => setShowImport(false)}
+          onImported={async (summary) => {
+            await onReload();
+            setImportNotice(`${summary.createdStudents} added · ${summary.updatedStudents} updated${summary.createdClassrooms ? ` · ${summary.createdClassrooms} classes created` : ""}`);
+            window.setTimeout(() => setImportNotice(null), 3500);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -171,7 +179,81 @@ export function AssessmentView({ data }: { data: LabData }) {
   );
 }
 
+function PresetEditorDialog({ preset, data, onClose, onSaved }: { preset?: AssessmentPreset; data: LabData; onClose: () => void; onSaved: () => Promise<void> }) {
+  const existingCriteria = preset
+    ? data.criteria.filter((criterion) => criterion.presetId === preset.id).sort((left, right) => left.position - right.position)
+    : [];
+  const [name, setName] = useState(preset?.name ?? "");
+  const [scope, setScope] = useState<CriterionScope>(preset?.scope ?? "team");
+  const [subjectArea, setSubjectArea] = useState<SubjectArea>(preset?.subjectArea ?? "generic");
+  const [active, setActive] = useState(preset?.active ?? true);
+  const [criteriaText, setCriteriaText] = useState(existingCriteria.filter((criterion) => criterion.active).map((criterion) => criterion.name).join("\n"));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const cleanName = name.trim();
+    const criterionNames = criteriaText.split("\n").map((value) => value.trim()).filter(Boolean);
+    if (!cleanName) {
+      setError("Give this preset a name.");
+      return;
+    }
+    if (!criterionNames.length) {
+      setError("Add at least one criterion.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const presetId = preset?.id ?? `preset-${crypto.randomUUID()}`;
+      const nextCriteria = criterionNames.map((criterionName, position) => {
+        const current = existingCriteria[position];
+        return {
+          id: current?.id ?? `criterion-${crypto.randomUUID()}`,
+          name: criterionName,
+          scope,
+          subjectArea,
+          presetId,
+          position,
+          active: true,
+        };
+      });
+      await Promise.all([
+        repositories.presets.put({ id: presetId, name: cleanName, scope, subjectArea, criterionIds: nextCriteria.map((criterion) => criterion.id), active }),
+        ...nextCriteria.map((criterion) => repositories.presets.putCriterion(criterion)),
+        ...existingCriteria.slice(criterionNames.length).map((criterion) => repositories.presets.putCriterion({ ...criterion, active: false })),
+      ]);
+      await onSaved();
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The preset could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="preset-editor-title">
+      <section className="session-dialog preset-editor">
+        <header><div className="finish-icon"><Settings2 size={18} /></div><div><span>{preset ? "Assessment preset" : "New assessment preset"}</span><h2 id="preset-editor-title">{preset ? "Edit preset" : "Create preset"}</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+        <div className="session-form">
+          <label className="session-form__wide">Preset name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Workshop safety" autoFocus /></label>
+          <label>Applies to<select value={scope} onChange={(event) => setScope(event.target.value as CriterionScope)}><option value="team">Teams</option><option value="individual">Individuals</option></select></label>
+          <label>Subject<select value={subjectArea} onChange={(event) => setSubjectArea(event.target.value as SubjectArea)}><option value="generic">General</option><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option></select></label>
+          <label className="session-form__wide preset-editor__criteria">Criteria <textarea value={criteriaText} onChange={(event) => setCriteriaText(event.target.value)} rows={6} placeholder={"One criterion per line\ne.g. Uses tools safely"} /><small>One criterion per line. Saving keeps existing evidence records; removed lines are disabled for future sessions.</small></label>
+          <label className="preset-editor__active"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />Available when creating new sessions</label>
+        </div>
+        {error && <p className="session-dialog__error" role="alert">{error}</p>}
+        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="button" className="button-secondary" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save preset"}</button></footer>
+      </section>
+    </div>
+  );
+}
+
 export function SettingsView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
+  const [editingPreset, setEditingPreset] = useState<AssessmentPreset | null>(null);
+  const [showNewPreset, setShowNewPreset] = useState(false);
+
   async function exportData() {
     const snapshot = await repositories.exportSnapshot();
     const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" }));
@@ -193,29 +275,33 @@ export function SettingsView({ data, onReload }: { data: LabData; onReload: () =
         <div><span className="eyebrow">Workspace configuration</span><h1>Settings</h1><p>Subject presets are starting points and can evolve without changing historical evidence.</p></div>
       </div>
       <section className="surface">
-        <div className="surface__header"><div><h2>Assessment presets</h2><p>Four-level scale · Not observed is stored as an empty value, never zero.</p></div><Settings2 size={19} /></div>
+        <div className="surface__header"><div><h2>Assessment presets</h2><p>Configure the criteria available for teams and individuals in future sessions.</p></div><button type="button" className="button-secondary" onClick={() => setShowNewPreset(true)}><Plus size={15} />New preset</button></div>
         <div className="preset-grid">
           {data.presets.map((preset) => {
             const criteria = preset.criterionIds
               .map((id) => data.criteria.find((criterion) => criterion.id === id))
               .filter((criterion) => criterion !== undefined);
+            const useCount = data.sessions.filter((session) => session.teamPresetId === preset.id || session.individualPresetId === preset.id).length;
             return (
               <article className="preset-card" key={preset.id}>
                 <div className="preset-card__head">
                   <div><span className="preset-scope">{preset.scope}</span><h3>{preset.name}</h3></div>
-                  <span className="active-check"><Check size={13} />Active</span>
-                </div>
-                <ol>{criteria.map((criterion) => <li key={criterion.id}><span>{criterion.position + 1}</span>{criterion.name}</li>)}</ol>
-              </article>
+                      <span className="active-check"><Check size={13} />{preset.active ? (useCount ? `Used in ${useCount}` : "Available") : "Hidden"}</span>
+                    </div>
+                    <ol>{criteria.map((criterion) => <li key={criterion.id}><span>{criterion.position + 1}</span>{criterion.name}</li>)}</ol>
+                    <button type="button" className="preset-card__edit" onClick={() => setEditingPreset(preset)}><Pencil size={14} />Edit preset</button>
+                  </article>
             );
           })}
         </div>
       </section>
+      {editingPreset && <PresetEditorDialog preset={editingPreset} data={data} onClose={() => setEditingPreset(null)} onSaved={onReload} />}
+      {showNewPreset && <PresetEditorDialog data={data} onClose={() => setShowNewPreset(false)} onSaved={onReload} />}
       <section className="surface data-section">
         <div><Download size={19} /><div><h2>Local data</h2><p>All records stay in this browser and persist across restarts. Keep a portable JSON backup when needed.</p></div></div>
         <div className="data-actions">
           <button className="button-secondary" type="button" onClick={() => void exportData()}><Download size={15} />Export backup</button>
-          <button className="button-quiet" type="button" onClick={() => void resetDemo()}><RotateCcw size={15} />Reset demo</button>
+          <button className="button-quiet" type="button" onClick={() => void resetDemo()}><RotateCcw size={15} />Reset workspace</button>
         </div>
       </section>
     </div>

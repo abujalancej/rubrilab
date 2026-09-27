@@ -26,10 +26,12 @@ export const classroomSchema = z.object({
 
 export const studentSchema = z.object({
   id: stableId,
+  externalId: z.string().min(1).optional(),
   classroomId: stableId,
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   shortName: z.string().min(1).optional(),
+  groupName: z.string().min(1).optional(),
   active: z.boolean(),
 });
 
@@ -42,6 +44,8 @@ export const sessionSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   subjectArea: z.enum(subjectAreas),
+  teamPresetId: stableId.optional(),
+  individualPresetId: stableId.optional(),
   status: z.enum(sessionStatuses),
   notes: z.string().optional(),
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   ArrowDownUp,
@@ -9,12 +9,8 @@ import {
   ChevronRight,
   ClipboardCheck,
   Download,
-  Eye,
   FileSpreadsheet,
-  Minus,
   Plus,
-  Users,
-  X,
 } from "lucide-react";
 import { repositories } from "@/src/data/dexie";
 import type {
@@ -23,7 +19,6 @@ import type {
   Criterion,
   IndividualObservation,
   LabSession,
-  SessionTeam,
   Student,
   TeamObservation,
   WeightConfiguration,
@@ -421,8 +416,8 @@ function TeamOverview({ data, sessionIds }: { data: LabData; sessionIds: Set<str
 function ConfigurationView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
   const classroom = data.classrooms[0];
   const config = data.weightConfigurations[0];
-  const individualCriteria = data.criteria.filter((item) => item.scope === "individual");
-  const teamCriteria = data.criteria.filter((item) => item.presetId === "preset-common");
+  const individualCriteria = data.criteria.filter((item) => item.active && item.scope === "individual");
+  const teamCriteria = data.criteria.filter((item) => item.active && item.presetId === "preset-common");
 
   async function updateConfig(patch: Partial<WeightConfiguration>) {
     const current = config ?? {
@@ -479,14 +474,15 @@ function ConfigurationView({ data, onReload }: { data: LabData; onReload: () => 
   );
 }
 
-export function AssessmentWorkspace({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
-  const [tab, setTab] = useState<AssessmentTab>("overview");
+export function AssessmentWorkspace({ data, onReload, initialStudentId }: { data: LabData; onReload: () => Promise<void>; initialStudentId?: string }) {
+  const [tab, setTab] = useState<AssessmentTab>(initialStudentId ? "student" : "overview");
   const [periodId, setPeriodId] = useState("all");
-  const [studentId, setStudentId] = useState(data.students[0]?.id ?? "");
-  const individualCriteria = data.criteria.filter((item) => item.scope === "individual");
+  const [studentId, setStudentId] = useState(initialStudentId ?? data.students[0]?.id ?? "");
   const selectedPeriod = data.assessmentPeriods.find((item) => item.id === periodId);
   const sessions = data.sessions.filter((session) => !selectedPeriod || (session.date >= selectedPeriod.startDate && session.date <= selectedPeriod.endDate));
   const sessionIds = new Set(sessions.map((session) => session.id));
+  const individualPresetIds = new Set(sessions.flatMap((session) => session.individualPresetId ? [session.individualPresetId] : []));
+  const individualCriteria = data.criteria.filter((item) => item.active && item.scope === "individual" && (!individualPresetIds.size || individualPresetIds.has(item.presetId)));
   const student = data.students.find((item) => item.id === studentId) ?? data.students[0];
 
   function openStudent(id: string) {

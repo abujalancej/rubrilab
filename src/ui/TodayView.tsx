@@ -86,6 +86,14 @@ function timeNow(): string {
   return String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
 }
 
+function defaultTeamPresetId(session: LabSession): string {
+  if (session.teamPresetId) return session.teamPresetId;
+  if (session.subjectArea === "digital-electronics") return "preset-electronics";
+  if (session.subjectArea === "3d-printing") return "preset-printing";
+  if (session.subjectArea === "robotics") return "preset-robotics";
+  return "preset-common";
+}
+
 function elapsedLabel(session: LabSession, tick: number): string {
   void tick;
   if (!session.startTime || session.status !== "active") return session.status === "completed" ? "Completed" : "Not started";
@@ -150,8 +158,9 @@ function ActiveTeamCard({ team, data, onReload, onStudent, flash }: TeamCardProp
   const members = team.studentIds
     .map((id) => data.students.find((student) => student.id === id))
     .filter((student): student is Student => student !== undefined);
+  const session = data.sessions.find((item) => item.id === team.sessionId);
   const criteria = data.criteria
-    .filter((criterion) => criterion.presetId === "preset-robotics" && criterion.name !== "Result")
+    .filter((criterion) => session && criterion.active && criterion.presetId === defaultTeamPresetId(session) && criterion.name !== "Result")
     .slice(0, 3);
   const assistance = data.teacherAssistance.find((item) => item.teamId === team.id);
   const practicalResult = data.practicalResults.find((item) => item.teamId === team.id);
@@ -331,7 +340,9 @@ function StudentPanel({ student, team, session, data, onReload, onClose, flash }
   const [behaviourMode, setBehaviourMode] = useState<"positive" | "incident" | null>(null);
   const [editingEvents, setEditingEvents] = useState(false);
   const attendance = data.attendance.find((record) => record.studentId === student.id && record.sessionId === session.id);
-  const individualCriteria = data.criteria.filter((criterion) => criterion.scope === "individual");
+  const individualCriteria = session.individualPresetId
+    ? data.criteria.filter((criterion) => criterion.active && criterion.presetId === session.individualPresetId)
+    : [];
 
   async function saveAttendance(status: AttendanceStatus) {
     const previous = attendance?.status;
@@ -533,9 +544,10 @@ function FinishSummary({
   );
 }
 
-export function TodayView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
+export function TodayView({ data, onReload, onCreateSession }: { data: LabData; onReload: () => Promise<void>; onCreateSession: () => void }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const session = data.sessions.find((item) => item.id === selectedSessionId) ?? data.sessions.find((item) => item.status === "active") ?? data.sessions[0];
+  const openSessions = data.sessions.filter((item) => item.status !== "completed");
+  const session = openSessions.find((item) => item.id === selectedSessionId) ?? openSessions.find((item) => item.status === "active") ?? openSessions[0];
   const classroom = data.classrooms.find((item) => item.id === session?.classroomId);
   const sessionTeams = data.teams.filter((team) => team.sessionId === session?.id);
   const sessionStudentIds = new Set(sessionTeams.flatMap((team) => team.studentIds));
@@ -547,6 +559,7 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
   const [tick, setTick] = useState(0);
   const selectedStudent = data.students.find((student) => student.id === selectedStudentId);
   const studentTeam = sessionTeams.find((team) => team.studentIds.includes(selectedStudentId ?? ""));
+  const teamPreset = session ? data.presets.find((preset) => preset.id === defaultTeamPresetId(session)) : undefined;
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 60000);
@@ -586,7 +599,7 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
     flash("Session completed");
   }
 
-  if (!session) return <div className="empty-state"><h2>No session scheduled</h2></div>;
+  if (!session) return <div className="empty-state"><h2>No open laboratory session</h2><p>Create today’s session or reopen a completed one from History.</p><button type="button" className="new-session-button" onClick={onCreateSession}><Plus size={15} />Create or reopen a session</button></div>;
 
   return (
     <div className="active-session">
@@ -594,12 +607,12 @@ export function TodayView({ data, onReload }: { data: LabData; onReload: () => P
         <div className="active-session__identity">
           <div className="active-session__class"><span>Classroom</span><strong>{classroom?.name}</strong><small>{session.groupName ?? "Whole class"}</small></div>
           <div className="active-session__title">
-            <span>{session.subjectArea.replace("-", " ")} · {todayLabel(session.date)}</span>
+            <span>{session.subjectArea.replaceAll("-", " ")} · {teamPreset?.name ?? "No preset"} · {todayLabel(session.date)}</span>
             <h1>{session.title}</h1>
           </div>
         </div>
         <div className="active-session__actions">
-          <label className="session-picker"><span>Session</span><select value={session.id} onChange={(event) => setSelectedSessionId(event.target.value)} aria-label="Choose session">{data.sessions.filter((item) => item.status !== "completed").map((item) => <option key={item.id} value={item.id}>{item.title} · {item.groupName ?? "Whole class"}</option>)}</select></label>
+          <label className="session-picker"><span>Session</span><select value={session.id} onChange={(event) => setSelectedSessionId(event.target.value)} aria-label="Choose session">{openSessions.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.groupName ?? "Whole class"}</option>)}</select></label>
           <span className={"session-mode session-mode--" + session.status}>{session.status === "active" ? <PlayCircle size={13} /> : <Check size={13} />}{session.status}</span>
           <span className="elapsed"><Timer size={14} />{elapsedLabel(session, tick)}</span>
           <button type="button" className="mark-present" onClick={() => void markAllPresent()}><UserCheck size={15} />Mark all present</button>

@@ -44,10 +44,13 @@ export interface Classroom {
 
 export interface Student {
   id: string;
+  /** Stable identifier supplied by the school, when available. */
+  externalId?: string;
   classroomId: string;
   firstName: string;
   lastName: string;
   shortName?: string;
+  groupName?: string;
   active: boolean;
 }
 
@@ -60,6 +63,8 @@ export interface LabSession {
   startTime?: string;
   endTime?: string;
   subjectArea: SubjectArea;
+  teamPresetId?: string;
+  individualPresetId?: string;
   status: SessionStatus;
   notes?: string;
 }

@@ -70,6 +70,8 @@ export interface BehaviourObservationRepository {
 export interface PresetRepository {
   list(): Promise<AssessmentPreset[]>;
   listCriteria(): Promise<Criterion[]>;
+  put(value: AssessmentPreset): Promise<void>;
+  putCriterion(value: Criterion): Promise<void>;
 }
 
 export interface AssistanceRepository {

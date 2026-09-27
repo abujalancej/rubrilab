@@ -8,14 +8,16 @@ import {
   ChevronRight,
   Clock3,
   Filter,
+  Pencil,
   Plus,
+  Save,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import { repositories } from "@/src/data/dexie";
 import type { LabData } from "./useLabData";
-import type { LabSession, Student, SubjectArea } from "@/src/domain/model";
+import type { LabSession, SessionStatus, Student, SubjectArea } from "@/src/domain/model";
 
 const subjectLabels: Record<SubjectArea, string> = {
   robotics: "Robotics",
@@ -34,58 +36,88 @@ function localDate(): string {
 }
 
 function NewSessionDialog({ data, onClose, onCreated }: { data: LabData; onClose: () => void; onCreated: () => Promise<void> }) {
-  const [classroomId, setClassroomId] = useState(data.classrooms[0]?.id ?? "");
-  const [groupName, setGroupName] = useState("Whole class");
+  const initialClassroomId = data.classrooms[0]?.id ?? "";
+  const initialGroups = Array.from(new Set(data.students.filter((student) => student.classroomId === initialClassroomId && student.active).map((student) => student.groupName).filter((name): name is string => Boolean(name)))).sort();
+  const [classroomId, setClassroomId] = useState(initialClassroomId);
+  const [groupNames, setGroupNames] = useState(initialGroups.length ? initialGroups.join(", ") : "Whole class");
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(localDate);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:50");
   const [subjectArea, setSubjectArea] = useState<SubjectArea>("robotics");
+  const [teamPresetId, setTeamPresetId] = useState(() => data.presets.find((preset) => preset.scope === "team" && preset.subjectArea === "robotics")?.id ?? data.presets.find((preset) => preset.scope === "team" && preset.subjectArea === "generic")?.id ?? "");
+  const [individualPresetId, setIndividualPresetId] = useState(() => data.presets.find((preset) => preset.scope === "individual" && (preset.subjectArea === "robotics" || preset.subjectArea === "generic"))?.id ?? "");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
 
-  const groupOptions = Array.from(new Set(
-    data.teams
-      .filter((team) => data.sessions.find((session) => session.id === team.sessionId)?.classroomId === classroomId)
-      .map((team) => team.name),
-  ));
+  const classroomStudents = data.students.filter((student) => student.classroomId === classroomId && student.active);
+  const teamPresetOptions = data.presets.filter((preset) => preset.scope === "team" && preset.active);
+  const individualPresetOptions = data.presets.filter((preset) => preset.scope === "individual" && preset.active);
+
+  function changeClassroom(id: string) {
+    setClassroomId(id);
+    const names = Array.from(new Set(data.students.filter((student) => student.classroomId === id && student.active).map((student) => student.groupName).filter((name): name is string => Boolean(name)))).sort();
+    setGroupNames(names.length ? names.join(", ") : "Whole class");
+  }
+
+  function changeSubject(value: SubjectArea) {
+    setSubjectArea(value);
+    const defaultTeamPreset = data.presets.find((preset) => preset.scope === "team" && preset.active && preset.subjectArea === value)
+      ?? data.presets.find((preset) => preset.scope === "team" && preset.active && preset.subjectArea === "generic");
+    setTeamPresetId(defaultTeamPreset?.id ?? "");
+    setIndividualPresetId(data.presets.find((preset) => preset.scope === "individual" && preset.active)?.id ?? "");
+  }
 
   async function createSession() {
     const cleanTitle = title.trim();
-    const cleanGroup = groupName.trim() || "Whole class";
+    const groups = Array.from(new Set(groupNames.split(/[,\n]/).map((name) => name.trim()).filter(Boolean)));
+    if (!groups.length) groups.push("Whole class");
     if (!classroomId || !cleanTitle || !date) {
       setError("Choose a class and date, and add a session title.");
       return;
     }
-    const students = data.students.filter((student) => student.classroomId === classroomId && student.active);
-    const previousTeam = data.teams.find((team) => team.name === cleanGroup && data.sessions.find((session) => session.id === team.sessionId)?.classroomId === classroomId);
-    const memberIds = previousTeam?.studentIds ?? students.map((student) => student.id);
-    if (!memberIds.length) {
+    const students = classroomStudents;
+    if (!students.length) {
       setError("This class has no active students to add to the session.");
       return;
     }
+    const memberships = groups.map((name) => ({
+      name,
+      studentIds: name.toLocaleLowerCase() === "whole class"
+        ? students.map((student) => student.id)
+        : students.filter((student) => student.groupName?.toLocaleLowerCase() === name.toLocaleLowerCase()).map((student) => student.id),
+    }));
+    const emptyGroup = memberships.find((group) => group.studentIds.length === 0);
+    if (emptyGroup) {
+      setError(`“${emptyGroup.name}” has no students. Assign students to that group in Classes first.`);
+      return;
+    }
+    const memberIds = Array.from(new Set(memberships.flatMap((group) => group.studentIds)));
 
     const sessionId = "session-" + crypto.randomUUID();
-    const teamId = sessionId + "-group";
     await repositories.sessions.put({
       id: sessionId,
       classroomId,
-      groupName: cleanGroup,
+      groupName: groups.length === 1 ? groups[0] : groups.length + " groups",
       title: cleanTitle,
       date,
       startTime,
       endTime,
       subjectArea,
+      teamPresetId: teamPresetId || undefined,
+      individualPresetId: individualPresetId || undefined,
       status: "active",
       notes: notes.trim() || undefined,
     });
-    await repositories.teams.put({
-      id: teamId,
-      sessionId,
-      name: cleanGroup,
-      studentIds: memberIds,
-      operationalStatus: "not-started",
-    });
+    await Promise.all(memberships.map(async ({ name, studentIds }, index) => {
+      await repositories.teams.put({
+        id: sessionId + "-group-" + String(index + 1),
+        sessionId,
+        name,
+        studentIds,
+        operationalStatus: "not-started",
+      });
+    }));
     await Promise.all(memberIds.map((studentId) => repositories.attendance.put({
       id: "attendance-" + sessionId + "-" + studentId,
       studentId,
@@ -102,18 +134,84 @@ function NewSessionDialog({ data, onClose, onCreated }: { data: LabData; onClose
       <section className="session-dialog">
         <header><div className="finish-icon"><Plus size={18} /></div><div><span>New practical session</span><h2 id="new-session-title">Create session</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
         <div className="session-form">
-          <label>Class<select value={classroomId} onChange={(event) => setClassroomId(event.target.value)}>{data.classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
-          <label>Group<input list="session-groups" value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Whole class or Group A" /><datalist id="session-groups"><option value="Whole class" />{groupOptions.map((group) => <option key={group} value={group} />)}</datalist></label>
+          <label>Class<select value={classroomId} onChange={(event) => changeClassroom(event.target.value)}>{data.classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+          <label className="session-form__wide">Laboratory groups<textarea value={groupNames} onChange={(event) => setGroupNames(event.target.value)} rows={2} placeholder="Group A, Group B, Group C" /></label>
           <label className="session-form__wide">Title<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Sensor calibration" autoFocus /></label>
           <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-          <label>Subject<select value={subjectArea} onChange={(event) => setSubjectArea(event.target.value as SubjectArea)}><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option><option value="generic">General</option></select></label>
+          <label>Subject<select value={subjectArea} onChange={(event) => changeSubject(event.target.value as SubjectArea)}><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option><option value="generic">General</option></select></label>
+          <label>Team preset<select value={teamPresetId} onChange={(event) => setTeamPresetId(event.target.value)}>{teamPresetOptions.map((preset) => <option key={preset.id} value={preset.id}>{preset.name} · {subjectLabels[preset.subjectArea]}</option>)}</select></label>
+          <label>Individual preset<select value={individualPresetId} onChange={(event) => setIndividualPresetId(event.target.value)}><option value="">None</option>{individualPresetOptions.map((preset) => <option key={preset.id} value={preset.id}>{preset.name} · {subjectLabels[preset.subjectArea]}</option>)}</select></label>
           <label>From<input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
           <label>To<input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
           <label className="session-form__wide">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} placeholder="Optional session note" /></label>
         </div>
-        <p className="session-dialog__hint">If you choose an existing group, its student membership is copied into this session. “Whole class” includes all active students in the selected class.</p>
+        <p className="session-dialog__hint">Groups come from the assignments in Classes. The selected presets determine exactly which assessment criteria appear during this session.</p>
         {error && <p className="session-dialog__error" role="alert">{error}</p>}
         <footer><button type="button" className="button-quiet" onClick={onClose}>Cancel</button><button type="button" className="finish-anyway" onClick={() => void createSession()}><Plus size={14} />Create session</button></footer>
+      </section>
+    </div>
+  );
+}
+
+function EditSessionDialog({ session, data, onClose, onSaved }: { session: LabSession; data: LabData; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [classroomId, setClassroomId] = useState(session.classroomId);
+  const [groupName, setGroupName] = useState(session.groupName ?? "Whole class");
+  const [title, setTitle] = useState(session.title);
+  const [date, setDate] = useState(session.date);
+  const [startTime, setStartTime] = useState(session.startTime ?? "");
+  const [endTime, setEndTime] = useState(session.endTime ?? "");
+  const [subjectArea, setSubjectArea] = useState<SubjectArea>(session.subjectArea);
+  const [teamPresetId, setTeamPresetId] = useState(session.teamPresetId ?? "");
+  const [individualPresetId, setIndividualPresetId] = useState(session.individualPresetId ?? "");
+  const [status, setStatus] = useState<SessionStatus>(session.status);
+  const [notes, setNotes] = useState(session.notes ?? "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!classroomId || !title.trim() || !date) {
+      setError("Choose a class and date, and add a session title.");
+      return;
+    }
+    setSaving(true);
+    await repositories.sessions.put({
+      ...session,
+      classroomId,
+      groupName: groupName.trim() || "Whole class",
+      title: title.trim(),
+      date,
+      startTime: startTime || undefined,
+      endTime: endTime || undefined,
+      subjectArea,
+      teamPresetId: teamPresetId || undefined,
+      individualPresetId: individualPresetId || undefined,
+      status,
+      notes: notes.trim() || undefined,
+    });
+    await onSaved();
+    onClose();
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="edit-session-title">
+      <section className="session-dialog">
+        <header><div className="finish-icon"><Pencil size={17} /></div><div><span>Editable session record</span><h2 id="edit-session-title">Edit session</h2></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></header>
+        <div className="session-form">
+          <label>Class<select value={classroomId} onChange={(event) => setClassroomId(event.target.value)}>{data.classrooms.map((classroom) => <option key={classroom.id} value={classroom.id}>{classroom.name}</option>)}</select></label>
+          <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as SessionStatus)}><option value="draft">Draft</option><option value="active">Active</option><option value="completed">Completed</option></select></label>
+          <label className="session-form__wide">Title<input value={title} onChange={(event) => setTitle(event.target.value)} autoFocus /></label>
+          <label>Group summary<input value={groupName} onChange={(event) => setGroupName(event.target.value)} /></label>
+          <label>Subject<select value={subjectArea} onChange={(event) => setSubjectArea(event.target.value as SubjectArea)}><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option><option value="generic">General</option></select></label>
+          <label>Team preset<select value={teamPresetId} onChange={(event) => setTeamPresetId(event.target.value)}><option value="">Automatic by subject</option>{data.presets.filter((preset) => preset.scope === "team").map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>
+          <label>Individual preset<select value={individualPresetId} onChange={(event) => setIndividualPresetId(event.target.value)}><option value="">None</option>{data.presets.filter((preset) => preset.scope === "individual").map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>
+          <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+          <label>From<input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} /></label>
+          <label>To<input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} /></label>
+          <label className="session-form__wide">Notes<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} /></label>
+        </div>
+        <p className="session-dialog__hint">A completed session can be corrected and kept completed, or reopened by changing its status to Active.</p>
+        {error && <p className="session-dialog__error" role="alert">{error}</p>}
+        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="button" className="finish-anyway" onClick={() => void save()} disabled={saving}><Save size={14} />{saving ? "Saving…" : "Save changes"}</button></footer>
       </section>
     </div>
   );
@@ -144,7 +242,7 @@ function DeleteSessionDialog({ session, data, onClose, onDeleted }: { session: L
   );
 }
 
-function SessionDetail({ session, data, onClose }: { session: LabSession; data: LabData; onClose: () => void }) {
+function SessionDetail({ session, data, onClose, onEdit }: { session: LabSession; data: LabData; onClose: () => void; onEdit: () => void }) {
   const attendance = data.attendance.filter((item) => item.sessionId === session.id);
   const teams = data.teams.filter((item) => item.sessionId === session.id);
   const teamEvidence = data.teamObservations.filter((item) => item.sessionId === session.id && item.score !== undefined);
@@ -156,7 +254,7 @@ function SessionDetail({ session, data, onClose }: { session: LabSession; data: 
       <aside className="history-drawer" aria-label={session.title + " session record"}>
         <header>
           <div><span>{prettyDate(session.date)} · {subjectLabels[session.subjectArea]}</span><h2>{session.title}</h2><p>{data.classrooms.find((item) => item.id === session.classroomId)?.name} · {session.groupName ?? "Whole class"} · {session.startTime}–{session.endTime}</p></div>
-          <button type="button" className="icon-button" onClick={onClose}><X size={18} /></button>
+          <div className="history-drawer__actions"><button type="button" className="drawer-edit-button" onClick={onEdit}><Pencil size={14} />Edit session</button><button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
         </header>
         <div className="history-drawer__body">
           <section className="history-detail-summary">
@@ -235,6 +333,7 @@ export function SessionHistoryView({ data, onReload }: { data: LabData; onReload
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showNewSession, setShowNewSession] = useState(false);
   const [deleteSession, setDeleteSession] = useState<LabSession | null>(null);
+  const [editSession, setEditSession] = useState<LabSession | null>(null);
   const selected = data.sessions.find((session) => session.id === selectedId);
   const sessions = data.sessions.filter((session) =>
     (classroomId === "all" || session.classroomId === classroomId) &&
@@ -255,6 +354,14 @@ export function SessionHistoryView({ data, onReload }: { data: LabData; onReload
       </section>
       <section className="history-browser">
         <div className="history-browser__head"><span>{sessions.length} sessions</span><span>Newest first</span></div>
+        {!sessions.length && (
+          <div className="history-empty">
+            <CalendarDays size={26} />
+            <h2>No laboratory sessions yet</h2>
+            <p>Create the first session only when you need it. Deleted sessions will stay deleted.</p>
+            <button type="button" className="new-session-button" onClick={() => setShowNewSession(true)}><Plus size={15} />Create first session</button>
+          </div>
+        )}
         {sessions.map((session) => {
           const attendance = data.attendance.filter((item) => item.sessionId === session.id);
           const teams = data.teams.filter((item) => item.sessionId === session.id);
@@ -274,8 +381,9 @@ export function SessionHistoryView({ data, onReload }: { data: LabData; onReload
           );
         })}
       </section>
-      {selected && <SessionDetail session={selected} data={data} onClose={() => setSelectedId(null)} />}
+      {selected && <SessionDetail session={selected} data={data} onClose={() => setSelectedId(null)} onEdit={() => setEditSession(selected)} />}
       {showNewSession && <NewSessionDialog data={data} onClose={() => setShowNewSession(false)} onCreated={onReload} />}
+      {editSession && <EditSessionDialog session={editSession} data={data} onClose={() => setEditSession(null)} onSaved={async () => { await onReload(); }} />}
       {deleteSession && <DeleteSessionDialog session={deleteSession} data={data} onClose={() => setDeleteSession(null)} onDeleted={async () => { setSelectedId(null); await onReload(); }} />}
     </div>
   );
