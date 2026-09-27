@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  AlertTriangle,
   Archive,
   BookOpenCheck,
   Check,
@@ -12,6 +13,7 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  Trash2,
   Upload,
   Users,
   X,
@@ -34,10 +36,8 @@ function formatDate(date: string): string {
   );
 }
 
-export function ClassesView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
+export function ClassesView({ data }: { data: LabData }) {
   const [classroomId, setClassroomId] = useState(data.classrooms[0]?.id ?? "");
-  const [showImport, setShowImport] = useState(false);
-  const [importNotice, setImportNotice] = useState<string | null>(null);
   const classroom = data.classrooms.find((item) => item.id === classroomId) ?? data.classrooms[0];
   const classroomStudents = data.students
     .filter((student) => student.classroomId === classroom?.id)
@@ -48,20 +48,12 @@ export function ClassesView({ data, onReload }: { data: LabData; onReload: () =>
 
   return (
     <div className="view-stack">
-      <section className="surface class-import">
-        <div className="surface__header">
-          <div><span className="eyebrow">1 · Classroom package</span><h1>Import classes</h1><p>Load one CSV or JSON package containing every class, student and laboratory group.</p></div>
-          <button className="button-secondary" type="button" onClick={() => setShowImport(true)}><Upload size={15} />Import package</button>
-        </div>
-        <div className="class-import__details">
-          <p><strong>One file, one source of truth.</strong> The class and group columns are read directly from the package; this screen does not ask for manual corrections.</p>
-          <span>Accepted formats: <strong>.csv</strong> and <strong>.json</strong></span>
-        </div>
-      </section>
-
+      <div className="view-intro">
+        <div><span className="eyebrow">Classroom data</span><h1>Classroom viewer</h1><p>{data.classrooms.length} classes · {activeStudents} active students · {loadedGroups} laboratory groups loaded</p></div>
+      </div>
       <section className="surface class-catalog">
         <div className="surface__header">
-          <div><span className="eyebrow">2 · Imported data</span><h2>Classroom viewer</h2><p>{data.classrooms.length} classes · {activeStudents} active students · {loadedGroups} laboratory groups loaded</p></div>
+          <div><h2>Imported roster</h2><p>Students and laboratory groups from the school package.</p></div>
           {data.classrooms.length > 0 && <label className="class-selector"><span className="sr-only">Select class</span><select value={classroom?.id ?? ""} onChange={(event) => setClassroomId(event.target.value)}>{data.classrooms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
         </div>
         {classroom ? <>
@@ -74,24 +66,10 @@ export function ClassesView({ data, onReload }: { data: LabData; onReload: () =>
           <div className="class-viewer" role="table" aria-label={`${classroom.name} imported roster`}>
             <div className="class-viewer__row class-viewer__row--header" role="row"><span>Student</span><span>Laboratory group</span><span>School ID</span></div>
             {classroomStudents.map((student, index) => <div className="class-viewer__row" role="row" key={student.id}><span><small>{String(index + 1).padStart(2, "0")}</small><strong>{student.lastName}, {student.firstName}</strong></span><span>{student.groupName ?? "Unassigned"}</span><span>{student.externalId ?? "—"}</span></div>)}
-            {classroomStudents.length === 0 && <div className="student-table__empty"><Users size={24} /><strong>No students in this class</strong><span>Import the school package to view students and laboratory groups here.</span></div>}
+            {classroomStudents.length === 0 && <div className="student-table__empty"><Users size={24} /><strong>No students in this class</strong><span>Import the school package from Settings to view students and laboratory groups here.</span></div>}
           </div>
-        </> : <div className="student-table__empty"><Users size={24} /><strong>No classroom package loaded</strong><span>Import a CSV or JSON package to inspect its classes, students and groups.</span></div>}
+        </> : <div className="student-table__empty"><Users size={24} /><strong>No classroom package loaded</strong><span>Import a CSV or JSON package from Settings to inspect its classes, students and groups.</span></div>}
       </section>
-      {importNotice && <p className="session-toast" role="status"><Check size={14} />{importNotice}</p>}
-      {showImport && (
-        <StudentImportDialog
-          classrooms={data.classrooms}
-          students={data.students}
-          defaultClassroomId={undefined}
-          onClose={() => setShowImport(false)}
-          onImported={async (summary) => {
-            await onReload();
-            setImportNotice(`${summary.createdStudents} added · ${summary.updatedStudents} updated${summary.createdClassrooms ? ` · ${summary.createdClassrooms} classes created` : ""}`);
-            window.setTimeout(() => setImportNotice(null), 3500);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -179,7 +157,7 @@ export function AssessmentView({ data }: { data: LabData }) {
   );
 }
 
-function PresetEditorDialog({ preset, data, onClose, onSaved }: { preset?: AssessmentPreset; data: LabData; onClose: () => void; onSaved: () => Promise<void> }) {
+function PresetEditorDialog({ preset, data, onClose, onSaved, onDelete }: { preset?: AssessmentPreset; data: LabData; onClose: () => void; onSaved: () => Promise<void>; onDelete?: () => void }) {
   const existingCriteria = preset
     ? data.criteria.filter((criterion) => criterion.presetId === preset.id).sort((left, right) => left.position - right.position)
     : [];
@@ -241,10 +219,72 @@ function PresetEditorDialog({ preset, data, onClose, onSaved }: { preset?: Asses
           <label>Applies to<select value={scope} onChange={(event) => setScope(event.target.value as CriterionScope)}><option value="team">Teams</option><option value="individual">Individuals</option></select></label>
           <label>Subject<select value={subjectArea} onChange={(event) => setSubjectArea(event.target.value as SubjectArea)}><option value="generic">General</option><option value="robotics">Robotics</option><option value="digital-electronics">Digital Electronics</option><option value="3d-printing">3D Printing</option></select></label>
           <label className="session-form__wide preset-editor__criteria">Criteria <textarea value={criteriaText} onChange={(event) => setCriteriaText(event.target.value)} rows={6} placeholder={"One criterion per line\ne.g. Uses tools safely"} /><small>One criterion per line. Saving keeps existing evidence records; removed lines are disabled for future sessions.</small></label>
-          <label className="preset-editor__active"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />Available when creating new sessions</label>
+          <label className="session-form__wide preset-editor__active"><input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />Available when creating new sessions</label>
         </div>
         {error && <p className="session-dialog__error" role="alert">{error}</p>}
-        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="button" className="button-secondary" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save preset"}</button></footer>
+        <footer className="preset-editor__footer">{preset && <button type="button" className="delete-session-button" onClick={onDelete} disabled={saving}><Trash2 size={14} />Delete</button>}<span className="preset-editor__footer-spacer" /><button type="button" className="button-quiet" onClick={onClose} disabled={saving}>Cancel</button><button type="button" className="button-secondary" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save"}</button></footer>
+      </section>
+    </div>
+  );
+}
+
+function DeletePresetDialog({ preset, onClose, onDeleted }: { preset: AssessmentPreset; onClose: () => void; onDeleted: () => Promise<void> }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function remove() {
+    if (!confirmed) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await repositories.presets.remove(preset.id);
+      await onDeleted();
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The preset could not be deleted.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-preset-title">
+      <section className="finish-dialog reset-workspace-dialog">
+        <header><div className="finish-icon finish-icon--danger"><Trash2 size={18} /></div><div><span>Destructive action</span><h2 id="delete-preset-title">Delete “{preset.name}”?</h2></div></header>
+        <p>This removes the preset and all of its criteria. Presets used by a session or recorded evidence cannot be deleted, so that history remains intact.</p>
+        <div className="reset-workspace-dialog__warning"><AlertTriangle size={16} /><span>For a preset already used in class, uncheck its availability instead of deleting it.</span></div>
+        <label className="reset-workspace-dialog__confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand that this unused preset and its criteria will be deleted.</label>
+        {error && <p className="session-dialog__error" role="alert">{error}</p>}
+        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={deleting}>Cancel</button><button type="button" className="delete-session-button" onClick={() => void remove()} disabled={!confirmed || deleting}><Trash2 size={14} />{deleting ? "Deleting…" : "Delete"}</button></footer>
+      </section>
+    </div>
+  );
+}
+
+function ResetWorkspaceDialog({ onClose, onExport, onReset }: { onClose: () => void; onExport: () => Promise<void>; onReset: () => Promise<void> }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  async function reset() {
+    if (!confirmed) return;
+    setResetting(true);
+    try {
+      await onReset();
+      onClose();
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  return (
+    <div className="finish-overlay" role="dialog" aria-modal="true" aria-labelledby="reset-workspace-title">
+      <section className="finish-dialog reset-workspace-dialog">
+        <header><div className="finish-icon finish-icon--danger"><AlertTriangle size={18} /></div><div><span>Destructive action</span><h2 id="reset-workspace-title">Reset local workspace?</h2></div></header>
+        <p>This permanently removes every local class, student, session, attendance record and assessment observation. RubriLab will then restore only its fictional starter workspace.</p>
+        <div className="reset-workspace-dialog__warning"><AlertTriangle size={16} /><span>This cannot be undone in RubriLab. Export a backup before continuing.</span></div>
+        <label className="reset-workspace-dialog__confirmation"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand that my local records will be deleted.</label>
+        <footer><button type="button" className="button-quiet" onClick={onClose} disabled={resetting}>Cancel</button><button type="button" className="button-secondary" onClick={() => void onExport()} disabled={resetting}><Download size={14} />Backup</button><button type="button" className="delete-session-button" onClick={() => void reset()} disabled={!confirmed || resetting}><RotateCcw size={14} />{resetting ? "Resetting…" : "Reset"}</button></footer>
       </section>
     </div>
   );
@@ -253,6 +293,10 @@ function PresetEditorDialog({ preset, data, onClose, onSaved }: { preset?: Asses
 export function SettingsView({ data, onReload }: { data: LabData; onReload: () => Promise<void> }) {
   const [editingPreset, setEditingPreset] = useState<AssessmentPreset | null>(null);
   const [showNewPreset, setShowNewPreset] = useState(false);
+  const [deletePreset, setDeletePreset] = useState<AssessmentPreset | null>(null);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
 
   async function exportData() {
     const snapshot = await repositories.exportSnapshot();
@@ -264,7 +308,7 @@ export function SettingsView({ data, onReload }: { data: LabData; onReload: () =
     URL.revokeObjectURL(url);
   }
 
-  async function resetDemo() {
+  async function resetWorkspace() {
     await repositories.resetDemo();
     await onReload();
   }
@@ -275,7 +319,13 @@ export function SettingsView({ data, onReload }: { data: LabData; onReload: () =
         <div><span className="eyebrow">Workspace configuration</span><h1>Settings</h1><p>Subject presets are starting points and can evolve without changing historical evidence.</p></div>
       </div>
       <section className="surface">
-        <div className="surface__header"><div><h2>Assessment presets</h2><p>Configure the criteria available for teams and individuals in future sessions.</p></div><button type="button" className="button-secondary" onClick={() => setShowNewPreset(true)}><Plus size={15} />New preset</button></div>
+        <div className="surface__header">
+          <div><h2>Classroom data</h2><p>Import the school roster in CSV or JSON with classes, students and laboratory groups.</p></div>
+          <div className="surface__actions"><button className="button-secondary" type="button" onClick={() => setShowImport(true)}><Upload size={15} />Import</button></div>
+        </div>
+      </section>
+      <section className="surface">
+        <div className="surface__header"><div><h2>Assessment presets</h2><p>Configure the criteria available for teams and individuals in future sessions.</p></div><button type="button" className="button-secondary" onClick={() => setShowNewPreset(true)}><Plus size={15} />New</button></div>
         <div className="preset-grid">
           {data.presets.map((preset) => {
             const criteria = preset.criterionIds
@@ -289,19 +339,25 @@ export function SettingsView({ data, onReload }: { data: LabData; onReload: () =
                       <span className="active-check"><Check size={13} />{preset.active ? (useCount ? `Used in ${useCount}` : "Available") : "Hidden"}</span>
                     </div>
                     <ol>{criteria.map((criterion) => <li key={criterion.id}><span>{criterion.position + 1}</span>{criterion.name}</li>)}</ol>
-                    <button type="button" className="preset-card__edit" onClick={() => setEditingPreset(preset)}><Pencil size={14} />Edit preset</button>
+                    <div className="preset-card__actions"><button type="button" className="preset-card__edit" onClick={() => setEditingPreset(preset)}><Pencil size={14} />Edit</button><button type="button" className="preset-card__delete" onClick={() => setDeletePreset(preset)}><Trash2 size={14} />Delete</button></div>
                   </article>
             );
           })}
         </div>
       </section>
-      {editingPreset && <PresetEditorDialog preset={editingPreset} data={data} onClose={() => setEditingPreset(null)} onSaved={onReload} />}
+      {editingPreset && <PresetEditorDialog preset={editingPreset} data={data} onClose={() => setEditingPreset(null)} onSaved={onReload} onDelete={() => { setDeletePreset(editingPreset); setEditingPreset(null); }} />}
       {showNewPreset && <PresetEditorDialog data={data} onClose={() => setShowNewPreset(false)} onSaved={onReload} />}
-      <section className="surface data-section">
-        <div><Download size={19} /><div><h2>Local data</h2><p>All records stay in this browser and persist across restarts. Keep a portable JSON backup when needed.</p></div></div>
-        <div className="data-actions">
-          <button className="button-secondary" type="button" onClick={() => void exportData()}><Download size={15} />Export backup</button>
-          <button className="button-quiet" type="button" onClick={() => void resetDemo()}><RotateCcw size={15} />Reset workspace</button>
+      {deletePreset && <DeletePresetDialog preset={deletePreset} onClose={() => setDeletePreset(null)} onDeleted={onReload} />}
+      {showResetConfirmation && <ResetWorkspaceDialog onClose={() => setShowResetConfirmation(false)} onExport={exportData} onReset={resetWorkspace} />}
+      {showImport && <StudentImportDialog classrooms={data.classrooms} students={data.students} defaultClassroomId={undefined} onClose={() => setShowImport(false)} onImported={async (summary) => { await onReload(); setImportNotice(`${summary.createdStudents} added · ${summary.updatedStudents} updated${summary.createdClassrooms ? ` · ${summary.createdClassrooms} classes created` : ""}`); window.setTimeout(() => setImportNotice(null), 3500); }} />}
+      {importNotice && <p className="session-toast" role="status"><Check size={14} />{importNotice}</p>}
+      <section className="surface">
+        <div className="surface__header">
+          <div><h2>Local data</h2><p>Stored on this device. Back up before resetting.</p></div>
+          <div className="surface__actions">
+          <button className="button-secondary" type="button" onClick={() => void exportData()}><Download size={15} />Backup</button>
+          <button className="button-quiet" type="button" onClick={() => setShowResetConfirmation(true)}><RotateCcw size={15} />Reset</button>
+          </div>
         </div>
       </section>
     </div>

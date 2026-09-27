@@ -49,7 +49,7 @@ export function LabApp() {
   }
 
   if (error) {
-    return <main className="startup-state"><CircleAlert size={28} /><h1>Local data could not be opened</h1><p>{error}</p><button onClick={() => void reload()}>Try again</button></main>;
+    return <main className="startup-state"><CircleAlert size={28} /><h1>Local data could not be opened</h1><p>{error}</p><button onClick={() => void reload()}>Retry</button></main>;
   }
 
   if (!data) {
@@ -101,7 +101,7 @@ export function LabApp() {
 
         <main className="workspace__content">
           {view === "today" && <TodayView data={data} onReload={reload} onCreateSession={() => navigate("history")} />}
-          {view === "classes" && <ClassesView data={data} onReload={reload} />}
+          {view === "classes" && <ClassesView data={data} />}
           {view === "history" && <SessionHistoryView data={data} onReload={reload} />}
           {view === "assessment" && <AssessmentWorkspace data={data} onReload={reload} />}
           {view === "settings" && <SettingsView data={data} onReload={reload} />}

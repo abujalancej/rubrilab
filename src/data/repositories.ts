@@ -72,6 +72,7 @@ export interface PresetRepository {
   listCriteria(): Promise<Criterion[]>;
   put(value: AssessmentPreset): Promise<void>;
   putCriterion(value: Criterion): Promise<void>;
+  remove(id: string): Promise<void>;
 }
 
 export interface AssistanceRepository {

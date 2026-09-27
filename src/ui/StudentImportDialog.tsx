@@ -140,7 +140,7 @@ export function StudentImportDialog({
         <footer>
           <button className="button-quiet" type="button" onClick={onClose}>Cancel</button>
           <button className="button-secondary" type="button" disabled={saving || !parsed?.rows.length || Boolean(parsed.errors.length)} onClick={() => void importRows()}>
-            <Upload size={14} />{saving ? "Importing…" : "Import classroom package"}
+            <Upload size={14} />{saving ? "Importing…" : "Import"}
           </button>
         </footer>
       </section>

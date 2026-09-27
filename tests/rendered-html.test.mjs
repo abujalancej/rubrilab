@@ -52,7 +52,7 @@ test("keeps persistence and domain concerns separated", async () => {
   assert.match(dataLayer, /sessions: \[\]/);
   assert.doesNotMatch(dataLayer, /hasHistoricalTeams|session-traffic-light/);
   assert.match(activeSession, /Mark all present/);
-  assert.match(activeSession, /Finish anyway/);
+  assert.match(activeSession, />Finish<\/button>/);
   assert.match(activeSession, /behaviourMode/);
   assert.match(activeSession, /repositories\.practicalResults\.put/);
   assert.match(activeSession, /defaultTeamPresetId/);
@@ -68,11 +68,13 @@ test("keeps persistence and domain concerns separated", async () => {
   assert.match(rosterImport, /parseStudentImport/);
   assert.match(rosterImport, /root\.students \?\? root\.alumnos \?\? root\.alumnes/);
   assert.match(rosterImport, /externalMatch \?\? nameMatch/);
-  assert.match(classesView, /Import package/);
-  assert.match(classesView, /One file, one source of truth/);
+  assert.match(classesView, />Import<\/button>/);
+  assert.match(classesView, /Classroom data/);
+  assert.match(classesView, /CSV or JSON/);
   assert.match(classesView, /Classroom viewer/);
   assert.match(classesView, /Create preset/);
   assert.match(classesView, /Edit preset/);
+  assert.match(classesView, />Delete<\/button>/);
   assert.match(classesView, /classroomStudents\.map/);
   assert.doesNotMatch(classesView, /StudentGroupEditor/);
   const appShell = await readFile(new URL("../src/ui/LabApp.tsx", import.meta.url), "utf8");

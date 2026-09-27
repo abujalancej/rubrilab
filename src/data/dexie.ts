@@ -233,6 +233,28 @@ export const repositories: LabRepositories = {
     putCriterion: async (value) => {
       await database.criteria.put(value);
     },
+    remove: async (presetId) => {
+      await database.transaction("rw", [database.presets, database.criteria, database.sessions, database.teamObservations, database.individualObservations], async () => {
+        const [preset, criteria, sessions, teamObservations, individualObservations] = await Promise.all([
+          database.presets.get(presetId),
+          database.criteria.where("presetId").equals(presetId).toArray(),
+          database.sessions.toArray(),
+          database.teamObservations.toArray(),
+          database.individualObservations.toArray(),
+        ]);
+        if (!preset) throw new Error("This assessment preset no longer exists.");
+
+        const criterionIds = new Set(criteria.map((criterion) => criterion.id));
+        const usedBySession = sessions.some((session) => session.teamPresetId === presetId || session.individualPresetId === presetId);
+        const usedByEvidence = teamObservations.some((item) => criterionIds.has(item.criterionId)) || individualObservations.some((item) => criterionIds.has(item.criterionId));
+        if (usedBySession || usedByEvidence) {
+          throw new Error("This preset is part of recorded session history. Hide it instead to preserve the evidence.");
+        }
+
+        await database.criteria.where("presetId").equals(presetId).delete();
+        await database.presets.delete(presetId);
+      });
+    },
   },
   assistance: {
     listBySession: (sessionId) => database.teacherAssistance.where("sessionId").equals(sessionId).toArray(),
