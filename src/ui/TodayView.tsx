@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  CalendarDays,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -442,14 +443,14 @@ function StudentPanel({ student, team, session, data, onReload, onClose, flash }
           <section className="drawer-section">
             <div className="drawer-section__title">
               <div><span>Attendance</span><strong className={"attendance-current attendance-current--" + (attendance?.status ?? "present")}>{attendanceLabels[attendance?.status ?? "present"]}</strong></div>
-              <button type="button" className="text-button" onClick={() => setEditingEvents((value) => !value)}>Edit times</button>
+              <button type="button" className="text-button" onClick={() => setEditingEvents((value) => !value)}>Edit</button>
             </div>
             <div className="attendance-actions">
               <button type="button" onClick={() => void saveAttendance("present")}><UserCheck size={14} />Present</button>
               <button type="button" onClick={() => void saveAttendance("absent")}><X size={14} />Absent</button>
               <button type="button" onClick={() => void saveAttendance("late")}><Clock3 size={14} />Late</button>
-              <button type="button" onClick={() => void saveAttendance("left-early")}><Flag size={14} />Leave early</button>
-              <button type="button" onClick={() => void saveAttendance("partial")}><RotateCcw size={14} />Return / partial</button>
+              <button type="button" onClick={() => void saveAttendance("left-early")}><Flag size={14} />Leave</button>
+              <button type="button" onClick={() => void saveAttendance("partial")}><RotateCcw size={14} />Return</button>
             </div>
             {editingEvents && (
               <div className="attendance-events">
@@ -538,16 +539,14 @@ function FinishSummary({
           <div className={cx(unfinishedTeams.length > 0 && "has-warning")}><dt>Unfinished teams</dt><dd>{unfinishedTeams.length}</dd></div>
           <div><dt>Individual evidence items</dt><dd>{data.individualObservations.filter((item) => item.sessionId === session.id && item.score !== undefined).length}</dd></div>
         </dl>
-        <footer><button type="button" className="button-quiet" onClick={onCancel}>Continue session</button><button type="button" className="finish-anyway" onClick={() => void onFinish()}><Check size={14} />Finish anyway</button></footer>
+        <footer><button type="button" className="button-quiet" onClick={onCancel}>Continue</button><button type="button" className="finish-anyway" onClick={() => void onFinish()}><Check size={14} />Finish</button></footer>
       </section>
     </div>
   );
 }
 
 export function TodayView({ data, onReload, onCreateSession }: { data: LabData; onReload: () => Promise<void>; onCreateSession: () => void }) {
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const openSessions = data.sessions.filter((item) => item.status !== "completed");
-  const session = openSessions.find((item) => item.id === selectedSessionId) ?? openSessions.find((item) => item.status === "active") ?? openSessions[0];
+  const session = data.sessions.find((item) => item.status === "active");
   const classroom = data.classrooms.find((item) => item.id === session?.classroomId);
   const sessionTeams = data.teams.filter((team) => team.sessionId === session?.id);
   const sessionStudentIds = new Set(sessionTeams.flatMap((team) => team.studentIds));
@@ -599,24 +598,30 @@ export function TodayView({ data, onReload, onCreateSession }: { data: LabData; 
     flash("Session completed");
   }
 
-  if (!session) return <div className="empty-state"><h2>No open laboratory session</h2><p>Create today’s session or reopen a completed one from History.</p><button type="button" className="new-session-button" onClick={onCreateSession}><Plus size={15} />Create or reopen a session</button></div>;
+  if (!session) return (
+    <div className="history-empty">
+      <CalendarDays size={26} />
+      <h2>No open laboratory session</h2>
+      <p>Create today’s session or reopen a completed one from History.</p>
+      <button type="button" className="new-session-button" onClick={onCreateSession}><Plus size={15} />Create</button>
+    </div>
+  );
 
   return (
     <div className="active-session">
       <header className="active-session__header">
         <div className="active-session__identity">
-          <div className="active-session__class"><span>Classroom</span><strong>{classroom?.name}</strong><small>{session.groupName ?? "Whole class"}</small></div>
+          <div className="active-session__class"><span>Classroom</span><strong>{classroom?.name}</strong>{session.groupName && session.groupName !== "Whole class" && <small>{session.groupName}</small>}</div>
           <div className="active-session__title">
-            <span>{session.subjectArea.replaceAll("-", " ")} · {teamPreset?.name ?? "No preset"} · {todayLabel(session.date)}</span>
+            <span>{teamPreset?.name ?? session.subjectArea.replaceAll("-", " ")} · {todayLabel(session.date)}</span>
             <h1>{session.title}</h1>
           </div>
         </div>
         <div className="active-session__actions">
-          <label className="session-picker"><span>Session</span><select value={session.id} onChange={(event) => setSelectedSessionId(event.target.value)} aria-label="Choose session">{openSessions.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.groupName ?? "Whole class"}</option>)}</select></label>
           <span className={"session-mode session-mode--" + session.status}>{session.status === "active" ? <PlayCircle size={13} /> : <Check size={13} />}{session.status}</span>
           <span className="elapsed"><Timer size={14} />{elapsedLabel(session, tick)}</span>
-          <button type="button" className="mark-present" onClick={() => void markAllPresent()}><UserCheck size={15} />Mark all present</button>
-          {session.status === "active" && <button type="button" className="finish-session" onClick={() => setShowFinish(true)}><Flag size={14} />Finish session</button>}
+          <button type="button" className="mark-present" onClick={() => void markAllPresent()} aria-label="Mark all present"><UserCheck size={15} />Present</button>
+          {session.status === "active" && <button type="button" className="finish-session" onClick={() => setShowFinish(true)}><Flag size={14} />Finish</button>}
         </div>
       </header>
 
