@@ -143,11 +143,11 @@ function ExportMenu({
 
   return (
     <div className="export-menu">
-      <button type="button" className="export-trigger" onClick={() => setOpen((value) => !value)}><Download size={14} />Export CSV<ChevronRight size={12} /></button>
+      <button type="button" className="export-trigger" onClick={() => setOpen((value) => !value)}><Download size={14} />Export<ChevronRight size={12} /></button>
       {open && (
         <div className="export-popover">
           <button type="button" onClick={exportAttendance}><FileSpreadsheet size={14} /><span>Attendance<small>One row per student and session</small></span></button>
-          <button type="button" onClick={exportIndividual}><FileSpreadsheet size={14} /><span>Individual evidence<small>Criterion-level observations</small></span></button>
+          <button type="button" onClick={exportIndividual}><FileSpreadsheet size={14} /><span>Individual<small>Criterion-level observations</small></span></button>
           <button type="button" onClick={exportTeams}><FileSpreadsheet size={14} /><span>Team evidence<small>Teams, scores, help and results</small></span></button>
         </div>
       )}
@@ -219,7 +219,7 @@ function ClassOverview({
             </div>
             {rows.map(({ student, studentAttendance, studentEvidence, incidents }) => (
               <button type="button" className="assessment-table__row" key={student.id} onClick={() => onStudent(student.id)}>
-                <span className="assessment-student"><span className="avatar">{student.firstName[0]}{student.lastName[0]}</span><span><strong>{student.lastName}, {student.firstName}</strong>{lowCoverageStudents.has(student.id) && <small>Needs observation</small>}</span></span>
+                <span className="assessment-student"><span><strong>{student.lastName}, {student.firstName}</strong>{lowCoverageStudents.has(student.id) && <small>Needs observation</small>}</span></span>
                 <span className="attendance-cell"><strong>{attendanceRate(studentAttendance).toFixed(0)}%</strong><small>{studentAttendance.filter((item) => item.status === "absent").length} absent</small></span>
                 {criteria.map((criterion) => <EvidenceValue key={criterion.id} observations={studentEvidence.filter((item) => item.criterionId === criterion.id)} />)}
                 <span className="total-evidence"><strong>{studentEvidence.length}</strong><small>items</small></span>
@@ -450,7 +450,7 @@ function ConfigurationView({ data, onReload }: { data: LabData; onReload: () => 
   return (
     <div className="configuration-grid">
       <section className="review-surface">
-        <div className="review-surface__head"><div><h2>Assessment periods</h2><p>Periods filter session evidence; they never duplicate it.</p></div><button type="button" className="small-add" onClick={() => void addPeriod()}><Plus size={12} />Custom period</button></div>
+        <div className="review-surface__head"><div><h2>Assessment periods</h2><p>Periods filter session evidence; they never duplicate it.</p></div><button type="button" className="small-add" onClick={() => void addPeriod()}><Plus size={12} />Add</button></div>
         <div className="period-list">{data.assessmentPeriods.map((period) => <div key={period.id}><CalendarRange size={15} /><span><strong>{period.name}</strong><small>{period.startDate} — {period.endDate}</small></span>{period.active && <b>Active</b>}</div>)}</div>
       </section>
       <section className="review-surface">
